@@ -40,6 +40,11 @@ crashlytics-build.properties
 headless/**/bin/
 headless/**/obj/
 
+# Test run output (NUnit/TRX results from `dotnet test` / the pre-commit gate)
+TestResults/
+*.trx
+results.xml
+
 # ---- OS / editors ----
 .DS_Store
 .vs/
