@@ -89,6 +89,29 @@ via the EditMode Test Runner.
 | Phase 3.1 fairness | N-push == vigour by colour; starved paler; debt not encoded | ✅ |
 | Phase 3.2 gate | hidden state stays hidden until scouted/metered; debt never on full | ✅ |
 | Phase 3.3 assists | assists change surfacing only — sim state byte-identical (determinism) | ✅ |
+| Phase 4.1 budget | over-assignment beyond ~30 crew-hours is rejected, forcing triage | ✅ |
+| Phase 4.2 delegation | delegate-vs-hands-on quality gap, skill-scaled, never closes | ✅ |
+| Phase 4.4 interrupts | quiet days skip; disease break / heat spike stop the skip | ✅ |
+
+## Phase 4 — the maintenance window (`Assets/Sim/Crew`)
+
+The daily heartbeat: a crew-hour budget you cannot beat, a delegation depth-dial, and time that
+scales to stakes.
+
+- **4.1 crew + hours.** `CrewMember` / `TaskOrder` / `TaskCatalog` (hour costs + effect mapping) +
+  `MaintenanceWindow` (fixed budget = sum of crew availability ≈ 30 h; over-assignment rejected/
+  flagged). Tasks convert to a per-zone plan applied on resolve step 6.
+- **4.2 delegation.** `Delegation.StaffQuality = clamp(0.55 + 0.4·skill + 0.15·knowledge, 0, 0.95)`,
+  player = 1.0 — a hard ceiling staff never beat. Quality scales the beneficial deltas; delegated
+  spray runs on a **schedule, blind to the live tell**. Fully-delegated carries measurably more
+  disease than hands-on; the gap shrinks with skill but never closes.
+- **4.3 window UI** (`MaintenanceWindowHud`): budget bar, per-task delegate/do-it-myself + crew,
+  over-assignment blocked, Resolve Window. **Triage squeeze verified headless**: a full program is
+  ~59.5 h against a 30 h budget (~50% doable); keeping the course presentable (29.2 h) leaves no
+  room to also attend a brewing #7 — something gets cut.
+- **4.4 fidelity scaling.** Interrupt detection (pipeline step 11): heat spike / fresh disease break
+  stop the interruptible skip and pull the player into the window; routine days fly by on the
+  delegated auto-program.
 
 ## Phase 3 — legibility (`Assets/Sim/Legibility`)
 
