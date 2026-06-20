@@ -92,6 +92,24 @@ via the EditMode Test Runner.
 | Phase 4.1 budget | over-assignment beyond ~30 crew-hours is rejected, forcing triage | ✅ |
 | Phase 4.2 delegation | delegate-vs-hands-on quality gap, skill-scaled, never closes | ✅ |
 | Phase 4.4 interrupts | quiet days skip; disease break / heat spike stop the skip | ✅ |
+| A+.1 ball physics | faster green rolls farther; firmer green releases more; slope breaks | ✅ |
+
+## Milestone A finisher — the minimal putt (`Assets/Sim/Physics`)
+
+The ball reads the course (TDD §7): putt/approach behaviour is a deterministic function of the
+green's MAINTAINED state — no separate physics tuning to fiddle.
+
+- **A+.1 `BallPhysics`** (Sim, pure C#): Stimp → roll distance; firmness → approach release + bounce;
+  mesh slope → break + downhill/uphill roll. Tested headless.
+- **A+.2 `PuttingController`** (Unity): putt + short approach on the existing first-person controller,
+  rolling across the real green mesh with a per-hole stroke tally.
+- **A+.3 interlock** (verified headless in `Greenkeeper.FeelTest`): a MEMBER setup (Stimp ~9.6, soft)
+  and a TOURNAMENT setup (Stimp ~11.7, firm) reached *through maintenance* (mow height, water, roll)
+  play measurably differently — the same putt rolls ~23% farther on the tournament green.
+
+**Milestone A is the full fun-core:** read the course (legibility) → decide and act under the
+hour-squeeze (window) → walk out and putt on the conditions you made (ball physics). The remaining
+gate is not code — it is *playing the whole loop and judging if it's fun* (see README).
 
 ## Phase 4 — the maintenance window (`Assets/Sim/Crew`)
 

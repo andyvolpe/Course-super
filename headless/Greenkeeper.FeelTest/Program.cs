@@ -15,6 +15,71 @@ class Program
         NeglectTest();
         Console.WriteLine();
         TriageSqueeze();
+        Console.WriteLine();
+        InterlockDemo();
+    }
+
+    // Step A+.3 (headless equivalent of the by-hand gate): two identical greens taken to MEMBER vs
+    // TOURNAMENT setup THROUGH MAINTENANCE, then putted with identical power. If they roll differently,
+    // the difference is something you dialed in — not a slider.
+    static void InterlockDemo()
+    {
+        Console.WriteLine("INTERLOCK — same green, two setups you create by maintenance, identical putt\n");
+
+        var member = PrepGreen(member: true);
+        var tournament = PrepGreen(member: false);
+        var t = AgronomyTuning.Default;
+
+        var putt = new Greenkeeper.Sim.Physics.PuttInput(0.8, new Greenkeeper.Sim.Math.Vec2(1, 0), Greenkeeper.Sim.Math.Vec2.Zero);
+        double memRoll = Greenkeeper.Sim.Physics.BallPhysics.SolvePutt(member, putt, t).RollDistanceFt;
+        double tourRoll = Greenkeeper.Sim.Physics.BallPhysics.SolvePutt(tournament, putt, t).RollDistanceFt;
+
+        // An identical approach to each, to show firmness release.
+        var appr = new Greenkeeper.Sim.Physics.ApproachInput(0.7, new Greenkeeper.Sim.Math.Vec2(1, 0));
+        double memRel = Greenkeeper.Sim.Physics.BallPhysics.SolveApproach(member, appr, t).ReleaseRollFt;
+        double tourRel = Greenkeeper.Sim.Physics.BallPhysics.SolveApproach(tournament, appr, t).ReleaseRollFt;
+
+        Console.WriteLine($"  MEMBER setup     (softer, less roll): Stimp {member.Stimp:F1}  firmness {member.FirmnessPct:F0}  " +
+                          $"moisture {member.SoilMoisturePct:F1}");
+        Console.WriteLine($"  TOURNAMENT setup (firm, double-cut+roll): Stimp {tournament.Stimp:F1}  firmness {tournament.FirmnessPct:F0}  " +
+                          $"moisture {tournament.SoilMoisturePct:F1}");
+        Console.WriteLine();
+        Console.WriteLine($"  Same 0.8-power putt:    member rolls {memRoll:F1} ft   |   tournament rolls {tourRoll:F1} ft   " +
+                          $"(+{tourRoll - memRoll:F1} ft, {(tourRoll / memRoll - 1) * 100:F0}% farther)");
+        Console.WriteLine($"  Same 0.7 approach:      member releases {memRel:F1} ft  |   tournament releases {tourRel:F1} ft");
+        Console.WriteLine($"\n  -> They play like two different greens, and the difference is the setup you dialed in.");
+    }
+
+    static ZoneState PrepGreen(bool member)
+    {
+        const int seed = 314;
+        var cfg = CourseConfig.GreensOnly(1);
+        var course = CourseFactory.Build(cfg, seed);
+        var dir = new GameDirector(course, seed, cfg.Tuning, cfg.Grass);
+        dir.Clock.JumpTo(120); // mid-summer, settled growth
+        var g = course.Get("green-01");
+
+        for (int d = 0; d < 18; d++)
+        {
+            var plan = new DayPlan();
+            var a = ZoneAction.None;
+            if (member)
+            {
+                a.Mow = true; a.MowHeightIn = 0.150;                 // higher cut -> slower
+                a.IrrigationMm = Math.Max(0, (24.0 - g.SoilMoisturePct) / 0.9); // keep it lush/soft
+                a.Roll = false;
+            }
+            else
+            {
+                a.Mow = true; a.MowHeightIn = 0.100;                 // tight cut -> fast
+                a.IrrigationMm = Math.Max(0, (12.0 - g.SoilMoisturePct) / 0.9); // dry it down -> firm
+                a.Roll = true;                                        // roll for speed/smoothness
+            }
+            a.FertilizerN = g.NitrogenPct < 35 ? 10 : 0;
+            plan.Set(g.Id, a);
+            dir.ResolveDay(plan);
+        }
+        return g;
     }
 
     static void NeglectTest()
