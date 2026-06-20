@@ -33,7 +33,10 @@ namespace Greenkeeper.Sim.Systems
                 + action.IrrigationMm * t.IrrigationWetnessHrsPerMm
                 + Mathx.Max0(z.SoilMoisturePct - fc) * t.SaturatedExcessWetnessHrs;
             double wetnessFactor = Mathx.Clamp01(effectiveWetness / t.LeafWetnessOptimumHrs);
-            double nitrogenFactor = Mathx.Max0(1.0 - z.NitrogenPct / t.NitrogenOptimum);
+            // Baseline susceptibility + starvation amplification, guarded and capped.
+            double nitrogenFactor = Mathx.Clamp(
+                t.DiseaseNitrogenBase + (1.0 - z.NitrogenPct / t.NitrogenOptimum),
+                0.0, t.DiseaseNitrogenMax);
 
             double favorability = Mathx.Max0(tempFactor) * Mathx.Max0(wetnessFactor)
                                   * nitrogenFactor * ctx.Grass.DiseaseSusceptibility;
@@ -96,6 +99,13 @@ namespace Greenkeeper.Sim.Systems
                 if (cell.Infection <= 0.01)
                     cell.ExpressionSeverity = Mathx.Max0(cell.ExpressionSeverity - 1.0);
             }
+
+            // Active dollar spot scars the canopy: infection thins density directly. This is what makes
+            // a sick green visibly thin (and lets the symptom show THROUGH density, per the legibility
+            // contract) — distinct from, and on top of, turf-debt bleed.
+            double meanInfection = z.MeanInfection;
+            if (meanInfection > 0.0)
+                z.DensityPct = Mathx.Clamp(z.DensityPct - (meanInfection / 100.0) * t.InfectionDensityLoss, 0.0, 100.0);
 
             ctx.Result.TellByZone[z.Id] = anyTell;
         }

@@ -37,8 +37,10 @@ namespace Greenkeeper.Sim.Config
         // (mm/day). Ra is extraterrestrial radiation supplied by the weather day.
         public double HargreavesC = 0.0023;
         public double HargreavesOffset = 17.8;
-        // Convert ET0 (mm) into VWC % loss for the managed rootzone depth.
-        public double EtToVwcPct = 0.9;
+        // One conversion for water depth -> volumetric water content over the managed rootzone:
+        // rain, irrigation, AND ET all convert mm of water to VWC% through this single factor, so
+        // inputs and losses are on the same physical scale (1 mm over a ~6" rootzone ≈ 0.5 VWC%).
+        public double MmToVwcPct = 0.5;
         // Crop coefficient by zone (greens mown tight transpire less than lush rough).
         public double KcGreen = 1.0;
         public double KcTee = 1.0;
@@ -102,13 +104,19 @@ namespace Greenkeeper.Sim.Config
         public double IrrigationWetnessHrsPerMm = 0.4; // irrigation adds leaf wetness
         public double SaturatedExcessWetnessHrs = 0.5; // each VWC% above FC adds wetness hours
 
-        public double PressureGain = 9.0;     // pressure accrued per unit favorability per day
+        // Even well-fed turf carries baseline dollar-spot susceptibility when wet; starvation amplifies
+        // it. Factor = clamp(DiseaseNitrogenBase + (1 - N/optimum), 0, DiseaseNitrogenMax).
+        public double DiseaseNitrogenBase = 0.4;
+        public double DiseaseNitrogenMax = 1.3;
+
+        public double PressureGain = 6.0;     // pressure accrued per unit favorability per day
         public double PressureDecay = 0.10;   // natural daily decay fraction of pressure
         public double SpreadDiffusion = 0.18; // sub-cell diffusion toward neighbour mean
 
         // Infection only advances once a TELL exists (pressure over threshold) — keeps it legible.
-        public double InfectionGain = 0.30;   // infection growth per (pressure-threshold) unit/day
+        public double InfectionGain = 0.22;   // infection growth per (pressure-threshold) unit/day
         public double InfectionRecovery = 1.2; // daily healing when pressure is low
+        public double InfectionDensityLoss = 2.0; // density lost per day at full infection (dollar-spot scars)
 
         // Spray: knocks down pressure/infection now and leaves residual protection.
         public double SprayPressureKnockdown = 0.85; // fraction of pressure removed on application
@@ -127,20 +135,21 @@ namespace Greenkeeper.Sim.Config
         // ---- Turf debt (§4.5) ----------------------------------------------------
         // Single accumulator (0..100). Offenses add; clean management slowly pays it down.
         public double DebtStartPct = 10.0;
-        public double DebtRecoveryPerDay = 0.8;  // paid down when a day is offence-free
+        public double DebtRecoveryPerDay = 1.0;  // paid down when a day is offence-free
         public double DebtBleedThreshold = 45.0; // above this, debt bleeds density (visible thinning)
-        public double DebtDensityBleed = 0.25;   // density lost per debt-point over threshold per day
+        public double DebtDensityBleed = 0.06;   // density lost per debt-point over threshold per day
         // Carb reserves SCALE the accrual rate: low reserves amplify every offence.
-        public double DebtReserveAmplification = 1.5; // max extra multiplier at zero reserves
+        public double DebtReserveAmplification = 0.8; // max extra multiplier at zero reserves
 
-        // Offence magnitudes (debt points, before reserve amplification).
-        public double OffenseScalp = 4.0;        // mown below safe height
-        public double OffenseWetTraffic = 2.5;   // mow/roll on saturated turf
-        public double OffenseDrought = 3.0;      // moisture under wilt point
-        public double OffenseOverwater = 1.5;    // moisture near saturation
-        public double OffenseNStarvation = 2.0;  // nitrogen critically low
-        public double OffenseSkippedAeration = 1.5; // high OM and overdue aeration
-        public double OffenseDiseaseUntreated = 2.0; // active infection, no spray cover
+        // Offence magnitudes (debt points, before reserve amplification). Sized so a single bad habit
+        // is a multi-week pressure, not instant death — debt is a slow burn that compounds.
+        public double OffenseScalp = 1.0;        // mown below safe height
+        public double OffenseWetTraffic = 0.8;   // mow/roll on saturated turf
+        public double OffenseDrought = 1.5;      // moisture under wilt point
+        public double OffenseOverwater = 0.8;    // moisture near saturation
+        public double OffenseNStarvation = 1.0;  // nitrogen critically low
+        public double OffenseSkippedAeration = 0.6; // high OM and overdue aeration
+        public double OffenseDiseaseUntreated = 1.2; // active infection, no spray cover
 
         // Offence trigger thresholds.
         public double SafeMowHeightIn = 0.10;    // below this height = scalp

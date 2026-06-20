@@ -26,5 +26,38 @@ namespace Greenkeeper.Tests
             Assert.Less(goodInfection, 5.0, "a well-kept green should stay near zero infection");
             Assert.Greater(badInfection, goodInfection * 2.0, "clear separation between bad and good management");
         }
+
+        /// <summary>
+        /// Regression guard for the Phase 3.0 death-spiral fix: a well-managed green must SURVIVE a
+        /// full season (it must not die of drought/debt), and mismanagement must visibly thin the
+        /// canopy relative to it.
+        /// </summary>
+        [Test]
+        public void GoodManagement_KeepsGreenAlive_AndBadManagementThinsIt()
+        {
+            const int seeds = 20;
+            double sumGoodDensity = 0, sumBadDensity = 0;
+            for (int s = 0; s < seeds; s++)
+            {
+                var good = new SimHarness(s, PlanLibrary.Good, CourseConfig.GreensOnly(), SummerStart).Run(SeasonDays);
+                var bad = new SimHarness(s, PlanLibrary.Bad, CourseConfig.GreensOnly(), SummerStart).Run(SeasonDays);
+
+                double goodDensity = AvgDensity(good);
+                double badDensity = AvgDensity(bad);
+                Assert.Greater(goodDensity, 60.0, $"seed {s}: a well-kept green must stay alive (density {goodDensity:F1})");
+                sumGoodDensity += goodDensity;
+                sumBadDensity += badDensity;
+            }
+            double meanGood = sumGoodDensity / seeds;
+            double meanBad = sumBadDensity / seeds;
+            Assert.Greater(meanGood, meanBad + 20.0, $"mismanagement must visibly thin turf (good {meanGood:F1} vs bad {meanBad:F1})");
+        }
+
+        private static double AvgDensity(SimHarness h)
+        {
+            double sum = 0; int n = 0;
+            foreach (var z in h.Course.Greens) { sum += z.DensityPct; n++; }
+            return n == 0 ? 0 : sum / n;
+        }
     }
 }

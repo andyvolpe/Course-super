@@ -31,7 +31,8 @@ namespace Greenkeeper.Sim.Systems
             double tmin = meanF - diurnal * 0.5;
 
             // Extraterrestrial radiation (mm/day equivalent for Hargreaves), always positive.
-            double ra = 12.0 + 6.0 * seasonal;
+            // Tuned so summer reference ET lands around 6-7 mm/day (temperate), not desert levels.
+            double ra = 4.5 + 2.5 * seasonal;
 
             // Rain: more frequent in the shoulders; humid summer storms.
             double rainProb = 0.30 + 0.10 * (1.0 - System.Math.Abs(seasonal));

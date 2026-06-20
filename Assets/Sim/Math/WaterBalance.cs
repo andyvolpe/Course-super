@@ -30,7 +30,7 @@ namespace Greenkeeper.Sim.Math
             double et0 = t.HargreavesC * w.SolarRa * (w.TmeanF + t.HargreavesOffset) * tempRangeGuard;
             et0 = Mathx.Max0(et0);
 
-            double m = z.SoilMoisturePct + w.RainMm * VwcPerMm(t) + irrigationMm * VwcPerMm(t);
+            double m = z.SoilMoisturePct + (w.RainMm + irrigationMm) * t.MmToVwcPct;
 
             // --- Drainage: only the excess above field capacity drains, guarded max(0, m-FC) ---
             double drainage = t.DrainFraction(z.Soil) * Mathx.Max0(m - fc);
@@ -38,7 +38,7 @@ namespace Greenkeeper.Sim.Math
 
             // --- Evapotranspiration, tapering to zero as the soil dries (can't evaporate absent water) ---
             double availability = Mathx.InverseLerp(residual, fc, m); // 0 at residual, 1 at FC+
-            double etPotentialVwc = et0 * t.CropCoefficient(z.Type) * t.EtToVwcPct * availability;
+            double etPotentialVwc = et0 * t.CropCoefficient(z.Type) * t.MmToVwcPct * availability;
             double etLoss = System.Math.Min(Mathx.Max0(m - residual), Mathx.Max0(etPotentialVwc));
             m -= etLoss;
 
@@ -46,9 +46,6 @@ namespace Greenkeeper.Sim.Math
 
             return new WaterResult { Et0Mm = et0, EtVwcLoss = etLoss, DrainageVwc = drainage };
         }
-
-        // 1 mm of rain over the managed rootzone raises VWC by this many percentage points.
-        private static double VwcPerMm(AgronomyTuning t) => 0.9;
 
         public static bool IsDroughtStressed(ZoneState z, AgronomyTuning t)
             => z.SoilMoisturePct < t.WiltPoint(z.Soil);
