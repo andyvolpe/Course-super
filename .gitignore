@@ -1,0 +1,47 @@
+# ---- Unity ----
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# Asset meta data should only be ignored when the corresponding asset is also ignored
+!/[Aa]ssets/**/*.meta
+
+# Unity3D generated files
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+sysinfo.txt
+*.apk
+*.aab
+*.unitypackage
+*.app
+crashlytics-build.properties
+
+# ---- Headless .NET verification harness ----
+# (build artifacts only — the .csproj files ARE tracked, overriding *.csproj above)
+!headless/**/*.csproj
+headless/**/bin/
+headless/**/obj/
+
+# ---- OS / editors ----
+.DS_Store
+.vs/
+.idea/
+.vscode/

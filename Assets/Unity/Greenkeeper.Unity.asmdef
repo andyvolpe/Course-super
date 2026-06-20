@@ -1,0 +1,16 @@
+{
+    "name": "Greenkeeper.Unity",
+    "rootNamespace": "Greenkeeper.Unity",
+    "references": [
+        "Greenkeeper.Sim"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
