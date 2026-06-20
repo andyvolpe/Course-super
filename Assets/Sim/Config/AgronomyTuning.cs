@@ -1,0 +1,185 @@
+// Greenkeeper.Sim — pure C#. MUST NOT reference UnityEngine.
+using Greenkeeper.Sim.Config;
+
+namespace Greenkeeper.Sim.Config
+{
+    /// <summary>
+    /// Every coefficient the sim math uses, in one place (TDD §4 / §5 tuning table).
+    /// All named, all tunable. The defaults are the MVP "cash-cow course" tuning.
+    ///
+    /// CONVENTIONS (TDD §4 header): state stored in natural units (%, inches, degF, Stimp-feet)
+    /// is normalized to 0..1 inside the math; every accumulator is clamped each tick.
+    /// </summary>
+    public sealed class AgronomyTuning
+    {
+        public static readonly AgronomyTuning Default = new AgronomyTuning();
+
+        // ---- Water balance (§4.1) -------------------------------------------------
+        // soilMoisture is volumetric water content in % (0..SaturationPct).
+        public double SaturationPct = 45.0;   // pore space full
+        public double ResidualMoisturePct = 2.0; // air-dry floor; ET cannot pull below this
+
+        // Field capacity by soil type (% VWC). Push-up holds much more water.
+        public double FieldCapacityUsga = 18.0;
+        public double FieldCapacityPushUp = 30.0;
+        // Organic matter raises field capacity (holds water). Added per OM% over baseline.
+        public double FcPerOmPct = 0.15;
+
+        // Wilt point by soil type (% VWC).
+        public double WiltPointUsga = 6.0;
+        public double WiltPointPushUp = 12.0;
+
+        // One-directional drainage: drains only the excess above FC, max(0, moisture - FC).
+        public double DrainFractionUsga = 0.85;   // fast sand rootzone
+        public double DrainFractionPushUp = 0.30; // slow native soil
+
+        // Hargreaves reference ET: ET0 = HargreavesC * Ra * (Tmean + HargreavesOffset) * sqrt(max(0,Tmax-Tmin))
+        // (mm/day). Ra is extraterrestrial radiation supplied by the weather day.
+        public double HargreavesC = 0.0023;
+        public double HargreavesOffset = 17.8;
+        // Convert ET0 (mm) into VWC % loss for the managed rootzone depth.
+        public double EtToVwcPct = 0.9;
+        // Crop coefficient by zone (greens mown tight transpire less than lush rough).
+        public double KcGreen = 1.0;
+        public double KcTee = 1.0;
+        public double KcFairway = 0.9;
+        public double KcRough = 1.1;
+        public double KcBunker = 0.2;
+
+        // ---- Soil thermal + GDD (§4.7) -------------------------------------------
+        public double GddBaseF = 50.0;        // cool-season base temperature
+        public double SoilTempLag = 0.25;     // soilTemp moves this fraction toward air mean each day
+
+        // ---- Growth / clip / carbohydrate reserves (§4.7) ------------------------
+        public double GrowthPerGdd = 0.9;     // raw growth units per GDD at ideal conditions
+        public double GrowthTempCenterF = 65.0; // cool-season optimum
+        public double GrowthTempHalfWidthF = 28.0;
+        public double NitrogenOptimum = 50.0; // N "units" considered fully sufficient
+        public double ClipPerGrowth = 0.6;    // clip volume per unit growth at full density
+        public double DensityGainPerGrowth = 0.35;
+        public double DensityNaturalWear = 0.15; // baseline daily density loss (traffic/senescence)
+
+        // Carbohydrate reserves (0..100): photosynthesis credits, growth + respiration debits.
+        public double PhotosynthesisMax = 4.0;   // max daily reserve gain at ideal temp/light
+        public double RespirationBase = 0.8;     // baseline daily reserve burn
+        public double CarbCostPerGrowth = 0.5;   // reserves spent per unit growth
+        public double HeatRespirationPerDegOverF = 0.06; // extra burn per degF of Tmean over optimum
+        public double CarbStartPct = 60.0;
+
+        // Nitrogen dynamics (0..100): uptake + leaching deplete; fertilize replenishes.
+        public double NitrogenStart = 45.0;
+        public double NitrogenUptakePerGrowth = 0.25;
+        public double NitrogenLeachPerDrainage = 0.05; // N lost proportional to drainage volume
+
+        // ---- Organic matter + grain (§4.7) ---------------------------------------
+        public double OmFromGrowth = 0.02;     // OM accrual per growth unit (thatch)
+        public double OmDecomposition = 0.01;  // daily microbial breakdown (absolute %)
+        public double OmStartPct = 35.0;
+        public double GrainFromGrowth = 0.04;
+        public double GrainMowReduction = 1.5; // grain knocked down by a mow
+        public double GrainStartPct = 10.0;
+
+        // ---- Derived surfaces: firmness + Stimp (§4.4) ---------------------------
+        public double FirmnessBase = 70.0;     // 0..100; drier + lower OM = firmer
+        public double FirmnessMoistureWeight = 45.0;
+        public double FirmnessOmWeight = 25.0;
+
+        public double StimpBase = 9.0;         // feet
+        public double StimpMin = 6.0;
+        public double StimpMax = 15.0;
+        public double StimpDensityBonus = 2.0; // dense, healthy turf rolls true and fast
+        public double StimpMoisturePenalty = 2.5; // wet greens are slow
+        public double StimpGrainPenalty = 1.5;
+        public double StimpDebtPenalty = 2.0;  // a thinning/debt-laden green is bumpy and slow
+        public double RollStimpBonus = 0.6;    // transient boost from a roll (decays)
+        public double RollDecay = 0.5;
+
+        // ---- Disease: dollar spot (§4.2 / §4.3) ----------------------------------
+        // Favorability factors, each guarded max(0,...) and multiplied together.
+        public double DiseaseTempCenterF = 72.0;
+        public double DiseaseTempHalfWidthF = 18.0; // ~0 outside [54,90]F
+        public double LeafWetnessOptimumHrs = 10.0; // hours of wetness for full favorability
+        public double IrrigationWetnessHrsPerMm = 0.4; // irrigation adds leaf wetness
+        public double SaturatedExcessWetnessHrs = 0.5; // each VWC% above FC adds wetness hours
+
+        public double PressureGain = 9.0;     // pressure accrued per unit favorability per day
+        public double PressureDecay = 0.10;   // natural daily decay fraction of pressure
+        public double SpreadDiffusion = 0.18; // sub-cell diffusion toward neighbour mean
+
+        // Infection only advances once a TELL exists (pressure over threshold) — keeps it legible.
+        public double InfectionGain = 0.30;   // infection growth per (pressure-threshold) unit/day
+        public double InfectionRecovery = 1.2; // daily healing when pressure is low
+
+        // Spray: knocks down pressure/infection now and leaves residual protection.
+        public double SprayPressureKnockdown = 0.85; // fraction of pressure removed on application
+        public double SprayInfectionKnockdown = 0.6;
+        public int SprayResidualDays = 14;
+        public double SprayResidualFavorabilityMult = 0.1; // favorability scaled while residual active
+
+        // ---- Fairness gate (§4.3 / GDD §3.1) -------------------------------------
+        // Expression (a visible symptom step) may fire ONLY when one of these readable tells holds.
+        public double TellPressureThreshold = 22.0; // pressure above this is a readable tell
+        public double ThinDensityThreshold = 70.0;  // density below this is a readable "thin" tell
+        public double ExpressionChanceMax = 0.9;    // cap on per-day expression probability
+        public double ExpressionPressureScale = 80.0; // pressure that maps to ExpressionChanceMax
+        public double ExpressionSeverityStep = 6.0;  // severity added when an expression fires
+
+        // ---- Turf debt (§4.5) ----------------------------------------------------
+        // Single accumulator (0..100). Offenses add; clean management slowly pays it down.
+        public double DebtStartPct = 10.0;
+        public double DebtRecoveryPerDay = 0.8;  // paid down when a day is offence-free
+        public double DebtBleedThreshold = 45.0; // above this, debt bleeds density (visible thinning)
+        public double DebtDensityBleed = 0.25;   // density lost per debt-point over threshold per day
+        // Carb reserves SCALE the accrual rate: low reserves amplify every offence.
+        public double DebtReserveAmplification = 1.5; // max extra multiplier at zero reserves
+
+        // Offence magnitudes (debt points, before reserve amplification).
+        public double OffenseScalp = 4.0;        // mown below safe height
+        public double OffenseWetTraffic = 2.5;   // mow/roll on saturated turf
+        public double OffenseDrought = 3.0;      // moisture under wilt point
+        public double OffenseOverwater = 1.5;    // moisture near saturation
+        public double OffenseNStarvation = 2.0;  // nitrogen critically low
+        public double OffenseSkippedAeration = 1.5; // high OM and overdue aeration
+        public double OffenseDiseaseUntreated = 2.0; // active infection, no spray cover
+
+        // Offence trigger thresholds.
+        public double SafeMowHeightIn = 0.10;    // below this height = scalp
+        public double WetTrafficMoisturePct = 32.0;
+        public double OverwaterMoisturePct = 40.0;
+        public double NStarvationPct = 12.0;
+        public double HighOmPct = 45.0;
+        public int AerationOverdueDays = 30;
+
+        // Aeration relief.
+        public double AerateOmRemoval = 6.0;
+        public double AerateDebtRelief = 8.0;
+        public double AerateDensityWear = 5.0;  // short-term thinning from coring
+        public int AerateRecoveryDays = 10;
+
+        // Mow / fertilize action effects.
+        public double MowDensityWear = 0.5;
+        public double FertilizerDefaultN = 12.0;
+
+        public double FieldCapacity(SoilType soil, double organicMatterPct)
+        {
+            double baseFc = soil == SoilType.UsgaSpec ? FieldCapacityUsga : FieldCapacityPushUp;
+            return baseFc + FcPerOmPct * (organicMatterPct - OmStartPct);
+        }
+
+        public double WiltPoint(SoilType soil) => soil == SoilType.UsgaSpec ? WiltPointUsga : WiltPointPushUp;
+
+        public double DrainFraction(SoilType soil) => soil == SoilType.UsgaSpec ? DrainFractionUsga : DrainFractionPushUp;
+
+        public double CropCoefficient(ZoneType zone)
+        {
+            switch (zone)
+            {
+                case ZoneType.Green: return KcGreen;
+                case ZoneType.Tee: return KcTee;
+                case ZoneType.Fairway: return KcFairway;
+                case ZoneType.Rough: return KcRough;
+                default: return KcBunker;
+            }
+        }
+    }
+}
