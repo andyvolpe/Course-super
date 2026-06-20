@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Headless build of the PURE-C# simulation. Compiles the exact same source files that the
+       Unity asmdef "Greenkeeper.Sim" compiles, so the sim can be verified with `dotnet test`
+       in CI / on a headless machine without Unity. There is intentionally NO reference to
+       UnityEngine here — if any Sim file took a Unity dependency, this build would fail. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>Greenkeeper.Sim</AssemblyName>
+    <RootNamespace>Greenkeeper.Sim</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Assets/Sim/**/*.cs" />
+  </ItemGroup>
+
+</Project>

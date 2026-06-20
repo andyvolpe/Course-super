@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Pre-commit gate: the keystone tests (T1-T4) must pass before any commit lands.
+# Enable once per clone with:   git config core.hooksPath .githooks
+set -euo pipefail
+repo_root="$(git rev-parse --show-toplevel)"
+exec "$repo_root/scripts/run-tests.sh"
