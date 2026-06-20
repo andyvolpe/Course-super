@@ -47,9 +47,14 @@ git config core.hooksPath .githooks
    (URP, Test Framework, Newtonsoft JSON).
 2. **Edit → Project Settings → Player → Active Input Handling → Both** (the FP controller uses the
    legacy Input Manager axes).
-3. Sandbox scene: create a `Player` (CharacterController + `FirstPersonController`, camera as child),
-   a ground `Plane`, and a GameObject with `GameManager` + `DebugHud`. Press Play to walk around and
-   click through the day loop.
+3. **Fastest path to play:** make an empty scene, create an empty GameObject, add the
+   **`GameBootstrap`** component, and press Play. It assembles everything at runtime — the sim, a
+   couple of tilted greens (3×3 sub-cell grids that read the sim), a first-person Player that can
+   walk / inspect / putt, a ball + cup, and all the HUDs.
+   - **TAB** toggles **Plan mode** (free cursor — click the morning window) and **Course mode**
+     (mouse-look + walk + putt).
+   - WASD move; **LMB** hold = putt, **RMB** hold = approach; **E** meter, **Q** scout, **R** soil-test
+     the green you're looking at.
 4. EditMode tests: **Window → General → Test Runner → EditMode → Run All.**
 
 See [`docs/greenkeeper-model.md`](docs/greenkeeper-model.md) for the full model and the test matrix.
