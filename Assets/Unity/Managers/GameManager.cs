@@ -34,6 +34,9 @@ namespace Greenkeeper.Unity.Managers
         public List<CrewMember> Crew { get; private set; }
         public MaintenanceWindow Window { get; private set; }
 
+        /// <summary>The fallible weather forecast the player plans against (Phase 5).</summary>
+        public Forecast Forecast { get; private set; }
+
         /// <summary>Recent per-step log lines for the debug UI.</summary>
         public readonly List<string> RecentLog = new List<string>();
         public const int MaxLogLines = 24;
@@ -48,6 +51,7 @@ namespace Greenkeeper.Unity.Managers
             Legibility = new LegibilitySystem(cfg.Tuning,
                 assistsEnabled ? DifficultySettings.WithAssists() : DifficultySettings.Full());
             Crew = CrewMember.DefaultCrew();
+            Forecast = new Forecast(weatherSeed, cfg.Tuning);
             BeginWindow();
             RecentLog.Clear();
             Log($"New game. {course.Zones.Count} zones, seed {weatherSeed}. Assists {(assistsEnabled ? "ON" : "OFF")}.");
