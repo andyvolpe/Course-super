@@ -35,7 +35,7 @@ namespace Greenkeeper.Unity.UI
             GUILayout.Space(6);
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("Resolve Day")) game.ResolveDay();
-            if (GUILayout.Button("Skip to next interrupt")) game.SkipToNextInterrupt();
+            if (GUILayout.Button("Skip to next interrupt")) game.SkipRoutineDays();
             GUILayout.EndHorizontal();
 
             GUILayout.BeginHorizontal();

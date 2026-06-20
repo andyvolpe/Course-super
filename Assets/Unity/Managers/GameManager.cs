@@ -88,21 +88,50 @@ namespace Greenkeeper.Unity.Managers
             foreach (var line in result.Log) Log($"D{result.DayIndex}: {line}");
         }
 
-        /// <summary>Skip resolving days until an interrupt is raised (GDD §1).</summary>
-        public int SkipToNextInterrupt(int maxDays = 365)
+        /// <summary>
+        /// Fidelity scaling (Phase 4.4 / GDD §1): fly through routine days on the delegated auto-program,
+        /// and STOP the moment an interrupt (heat spike / fresh disease break) fires — which yanks the
+        /// player into a full morning window for that day. Returns days skipped.
+        /// </summary>
+        public int SkipRoutineDays(int maxDays = 365)
         {
             int start = Director.Clock.DayIndex;
-            // Interrupt source stub: stop when any green shows a readable tell-driven expression today.
+            Director.ClearInterrupt();
             int resolved = Director.SkipUntil(
                 stop: _ => false,
-                planProvider: _ => BuildMorningPlan(),
+                planProvider: day => AutoRoutinePlan(),
                 maxDays: maxDays);
-            Log($"Skipped {resolved} day(s) ({start} -> {Director.Clock.DayIndex}).");
+
+            if (Director.InterruptRaised)
+            {
+                // Re-open the window so the player attends the crisis day at full attention.
+                BeginWindow();
+                Log($"Skipped {resolved} day(s) ({start} -> {Director.Clock.DayIndex}); INTERRUPT — into the window.");
+            }
+            else
+            {
+                Log($"Skipped {resolved} day(s) ({start} -> {Director.Clock.DayIndex}).");
+            }
             return resolved;
         }
 
-        /// <summary>The current morning plan. Empty for now; the player UI will populate this in Phase 3+.</summary>
-        private DayPlan BuildMorningPlan() => new DayPlan();
+        /// <summary>The crew's standard delegated program for a routine day (staff quality applies).</summary>
+        private DayPlan AutoRoutinePlan()
+        {
+            var w = new Crew.MaintenanceWindow(Crew);
+            foreach (var z in Course.Greens)
+            {
+                var mow = Crew.TaskCatalog.WalkMow(z.Id); mow.Delegated = true; mow.AssignedCrewId = Crew[0].Id; w.TryAssign(mow);
+                var water = Crew.TaskCatalog.Water(z.Id); water.Delegated = true; water.AssignedCrewId = Crew[0].Id; w.TryAssign(water);
+            }
+            // A scheduled (calendar) spray — the delegated routine, blind to the live tell by design.
+            if (Director.Clock.DayIndex % 14 == 0)
+                foreach (var z in Course.Greens)
+                {
+                    var spray = Crew.TaskCatalog.Spray(z.Id); spray.Delegated = true; spray.AssignedCrewId = Crew[1 % Crew.Count].Id; w.TryAssign(spray);
+                }
+            return w.ToDayPlan(Course, Crew.Delegation.Resolver(Crew));
+        }
 
         public void SaveGame()
         {

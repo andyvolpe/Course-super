@@ -101,8 +101,38 @@ namespace Greenkeeper.Sim.Systems
 
             result.Step($"resolved {Course.Zones.Count} zones; expressions={result.Expressions.Count}");
 
+            // Step 11 — interrupts. Crises always surface to the player, overriding any delegation/skip.
+            DetectInterrupts(result);
+
             Clock.AdvanceDay();
             return result;
+        }
+
+        private readonly System.Collections.Generic.HashSet<string> _diseaseFlagged = new System.Collections.Generic.HashSet<string>();
+
+        private void DetectInterrupts(DayResult result)
+        {
+            // Heat spike — a punishing day demands attention regardless of what's automated.
+            if (result.Weather.TmaxF > _tuning.HeatSpikeThresholdF)
+                result.Interrupts.Add($"Heat spike: {result.Weather.TmaxF:F0}F");
+
+            // Fresh disease break — a green crossing the threshold (armed once, until it recovers).
+            double clear = _tuning.InterruptInfectionThreshold * _tuning.InterruptClearFraction;
+            foreach (var z in Course.Greens)
+            {
+                double inf = z.MaxInfection;
+                if (inf >= _tuning.InterruptInfectionThreshold && !_diseaseFlagged.Contains(z.Id))
+                {
+                    _diseaseFlagged.Add(z.Id);
+                    result.Interrupts.Add($"Disease break on {z.Id} (infection {inf:F0})");
+                }
+                else if (inf < clear)
+                {
+                    _diseaseFlagged.Remove(z.Id);
+                }
+            }
+
+            if (result.IsInterruptDay) RaiseInterrupt();
         }
 
         /// <summary>

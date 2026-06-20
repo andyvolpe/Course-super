@@ -27,6 +27,10 @@ namespace Greenkeeper.Sim.Systems
         public readonly List<ExpressionEvent> Expressions = new List<ExpressionEvent>();
         public readonly Dictionary<string, bool> TellByZone = new Dictionary<string, bool>();
 
+        /// <summary>Crises raised this day that must pull the player into the window (Phase 4.4).</summary>
+        public readonly List<string> Interrupts = new List<string>();
+        public bool IsInterruptDay => Interrupts.Count > 0;
+
         public void Step(string message) => Log.Add(message);
     }
 }

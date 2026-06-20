@@ -99,8 +99,12 @@ namespace Greenkeeper.Unity.UI
             GUILayout.Space(4);
             GUILayout.BeginHorizontal();
             if (GUILayout.Button("RESOLVE WINDOW")) game.ResolveWindow();
+            if (GUILayout.Button("SKIP routine days")) game.SkipRoutineDays();
             showDebug = GUILayout.Toggle(showDebug, "debug readout");
             GUILayout.EndHorizontal();
+
+            if (game.Director.InterruptRaised)
+                GUILayout.Label("<color=#ff6060><b>INTERRUPT — a crisis pulled you back in. Attend the window.</b></color>", Rich());
 
             GUILayout.Space(4);
             GUILayout.Label("Log:");

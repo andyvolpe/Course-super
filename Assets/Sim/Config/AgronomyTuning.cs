@@ -169,6 +169,11 @@ namespace Greenkeeper.Sim.Config
         public double MowDensityWear = 0.5;
         public double FertilizerDefaultN = 12.0;
 
+        // ---- Interrupts (Phase 4.4): when the skip must STOP and pull the player in ----
+        public double HeatSpikeThresholdF = 95.0;     // a day this hot is a crisis to attend
+        public double InterruptInfectionThreshold = 15.0; // a green crossing this is a fresh disease break
+        public double InterruptClearFraction = 0.5;   // re-arm the disease interrupt once it falls back below this fraction
+
         public double FieldCapacity(SoilType soil, double organicMatterPct)
         {
             double baseFc = soil == SoilType.UsgaSpec ? FieldCapacityUsga : FieldCapacityPushUp;
