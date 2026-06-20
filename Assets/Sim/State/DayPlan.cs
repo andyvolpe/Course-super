@@ -14,7 +14,16 @@ namespace Greenkeeper.Sim.State
         public double FertilizerN;   // nitrogen applied
         public bool Aerate;
 
-        public static ZoneAction None => new ZoneAction { MowHeightIn = 0.125 };
+        /// <summary>
+        /// Delegation quality in (0,1] scaling the BENEFICIAL part of this action (Phase 4.2 / §4.8).
+        /// Convention: a value &lt;= 0 means "unspecified" and is treated as 1.0 (an expert hand), so
+        /// plans that never set it are unaffected. Use <see cref="EffectiveQuality"/> to read it.
+        /// </summary>
+        public double Quality;
+
+        public double EffectiveQuality => Quality <= 0.0 ? 1.0 : (Quality > 1.0 ? 1.0 : Quality);
+
+        public static ZoneAction None => new ZoneAction { MowHeightIn = 0.125, Quality = 1.0 };
     }
 
     /// <summary>

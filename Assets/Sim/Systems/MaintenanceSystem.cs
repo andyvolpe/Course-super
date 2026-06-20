@@ -16,41 +16,49 @@ namespace Greenkeeper.Sim.Systems
         public static void ApplyInputs(ZoneState z, ZoneAction action, AgronomyTuning t)
         {
             if (z.Type == ZoneType.Bunker) return;
+            double q = action.EffectiveQuality;
             if (action.FertilizerN > 0.0)
-                z.NitrogenPct = Mathx.Clamp(z.NitrogenPct + action.FertilizerN, 0.0, 100.0);
+                z.NitrogenPct = Mathx.Clamp(z.NitrogenPct + action.FertilizerN * q, 0.0, 100.0);
         }
 
-        /// <summary>Applied after disease: mow, roll, spray, aerate.</summary>
+        /// <summary>
+        /// Applied after disease: mow, roll, spray, aerate. The BENEFICIAL part of each effect scales
+        /// with delegation quality (§4.8) — a delegated hand never gets the full benefit of an expert.
+        /// </summary>
         public static void ApplyMechanical(ZoneState z, ZoneAction action, AgronomyTuning t)
         {
             if (z.Type == ZoneType.Bunker) return;
+            double q = action.EffectiveQuality;
 
             if (action.Mow)
             {
                 z.MowHeightIn = action.MowHeightIn;
-                z.GrainPct = Mathx.Max0(z.GrainPct - t.GrainMowReduction);
-                z.DensityPct = Mathx.Max0(z.DensityPct - t.MowDensityWear);
+                z.GrainPct = Mathx.Max0(z.GrainPct - t.GrainMowReduction * q); // cleaner cut = more grain knocked down
+                z.DensityPct = Mathx.Max0(z.DensityPct - t.MowDensityWear);    // wear is not a benefit; unscaled
                 z.ClipVolume = 0.0; // harvested
             }
 
             if (action.Roll)
-                z.RollBonus += t.RollStimpBonus;
+                z.RollBonus += t.RollStimpBonus * q;
 
             if (action.Spray)
             {
+                double knockP = t.SprayPressureKnockdown * q;
+                double knockI = t.SprayInfectionKnockdown * q;
                 for (int i = 0; i < z.Cells.Length; i++)
                 {
-                    z.Cells[i].Pressure *= (1.0 - t.SprayPressureKnockdown);
-                    z.Cells[i].Infection *= (1.0 - t.SprayInfectionKnockdown);
+                    z.Cells[i].Pressure *= (1.0 - knockP);
+                    z.Cells[i].Infection *= (1.0 - knockI);
                 }
-                z.SprayResidualDaysLeft = t.SprayResidualDays;
+                // Lower-quality applications give shorter residual protection (min 1 day if sprayed).
+                z.SprayResidualDaysLeft = System.Math.Max(1, (int)System.Math.Round(t.SprayResidualDays * q));
             }
 
             if (action.Aerate)
             {
-                z.OrganicMatterPct = Mathx.Max0(z.OrganicMatterPct - t.AerateOmRemoval);
-                z.TurfDebtPct = Mathx.Max0(z.TurfDebtPct - t.AerateDebtRelief);
-                z.DensityPct = Mathx.Max0(z.DensityPct - t.AerateDensityWear);
+                z.OrganicMatterPct = Mathx.Max0(z.OrganicMatterPct - t.AerateOmRemoval * q);
+                z.TurfDebtPct = Mathx.Max0(z.TurfDebtPct - t.AerateDebtRelief * q);
+                z.DensityPct = Mathx.Max0(z.DensityPct - t.AerateDensityWear); // coring wear unscaled
                 z.DaysSinceAeration = 0;
                 z.AerationRecoveryDaysLeft = t.AerateRecoveryDays;
             }

@@ -49,6 +49,10 @@ namespace Greenkeeper.Sim.Systems
         /// <summary>Resolve one day with a no-op plan.</summary>
         public DayResult ResolveDay() => ResolveDay(new DayPlan());
 
+        /// <summary>Resolve a day from a maintenance window (its accepted tasks become the morning plan).</summary>
+        public DayResult ResolveWindow(Crew.MaintenanceWindow window, System.Func<Crew.TaskOrder, double> qualityResolver = null)
+            => ResolveDay(window.ToDayPlan(Course, qualityResolver));
+
         /// <summary>Resolve one day with the supplied morning plan, then advance the clock.</summary>
         public DayResult ResolveDay(DayPlan plan)
         {
