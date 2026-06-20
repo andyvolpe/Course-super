@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Greenkeeper.Sim.Config;
+using Greenkeeper.Sim.Crew;
 using Greenkeeper.Sim.Legibility;
 using Greenkeeper.Sim.State;
 using Greenkeeper.Sim.Systems;
@@ -29,6 +30,10 @@ namespace Greenkeeper.Unity.Managers
         /// <summary>The single legibility gate (GDD §3). The Unity layer renders only what this permits.</summary>
         public LegibilitySystem Legibility { get; private set; }
 
+        /// <summary>The crew and the current morning maintenance window (GDD §4).</summary>
+        public List<CrewMember> Crew { get; private set; }
+        public MaintenanceWindow Window { get; private set; }
+
         /// <summary>Recent per-step log lines for the debug UI.</summary>
         public readonly List<string> RecentLog = new List<string>();
         public const int MaxLogLines = 24;
@@ -42,8 +47,29 @@ namespace Greenkeeper.Unity.Managers
             Director = new GameDirector(course, weatherSeed, cfg.Tuning, cfg.Grass);
             Legibility = new LegibilitySystem(cfg.Tuning,
                 assistsEnabled ? DifficultySettings.WithAssists() : DifficultySettings.Full());
+            Crew = CrewMember.DefaultCrew();
+            BeginWindow();
             RecentLog.Clear();
             Log($"New game. {course.Zones.Count} zones, seed {weatherSeed}. Assists {(assistsEnabled ? "ON" : "OFF")}.");
+        }
+
+        /// <summary>Open a fresh morning window for the current day (clears the queue, full hour budget).</summary>
+        public void BeginWindow() => Window = new MaintenanceWindow(Crew);
+
+        /// <summary>
+        /// Resolve today's window: accepted tasks become the plan, delegated tasks apply at staff
+        /// quality (the depth dial), then the day advances and a fresh window opens. Returns the result.
+        /// </summary>
+        public DayResult ResolveWindow()
+        {
+            var plan = Window.ToDayPlan(Course, Delegation.Resolver(Crew));
+            var result = Director.ResolveDay(plan);
+            Log($"D{result.DayIndex}: ran window — {Window.Accepted.Count} tasks, " +
+                $"{Window.UsedHours:F1}/{Window.BudgetHours:F0}h used" +
+                (Window.CouldNotFitEverything ? $", {Window.Rejected.Count} cut for hours" : ""));
+            foreach (var line in result.Log) Log($"  {line}");
+            BeginWindow();
+            return result;
         }
 
         /// <summary>Toggle the assist layer. Changes only what's surfaced — the sim run is identical.</summary>
