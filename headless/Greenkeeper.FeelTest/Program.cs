@@ -17,6 +17,55 @@ class Program
         TriageSqueeze();
         Console.WriteLine();
         InterlockDemo();
+        Console.WriteLine();
+        ForecastGamble();
+    }
+
+    // Phase 5 gate: does the forecast gamble bite? Show the forecast tightening toward a day (and
+    // missing), then the +3-day heat-spike skill — i.e. how often pre-watering on the forecast pays off.
+    static void ForecastGamble()
+    {
+        const int seed = 73;
+        var t = AgronomyTuning.Default;
+        var weather = new WeatherSystem(seed);
+        var forecast = new Forecast(seed, t);
+
+        Console.WriteLine("FORECAST GAMBLE — the forecast tightens toward the day, and sometimes misses\n");
+
+        // Find a hot summer day and show its forecast from 5 / 3 / 1 days out vs reality.
+        int target = -1;
+        for (int d = 100; d < 200; d++) if (weather.Generate(d).TmaxF > 88) { target = d; break; }
+        if (target > 6)
+        {
+            double actual = weather.Generate(target).TmaxF;
+            Console.WriteLine($"  Day {target} actual high = {actual:F1}F. Forecast as it approaches:");
+            foreach (int from in new[] { target - 5, target - 3, target - 1 })
+            {
+                var fd = forecast.Predict(from, target);
+                Console.WriteLine($"    from day {from} (+{fd.DaysOut}d): {fd.Predicted.TmaxF:F1}F ± {fd.TempBandF:F1}  " +
+                                  $"(off by {Math.Abs(fd.Predicted.TmaxF - actual):F1}F){(fd.PredictedHeatSpike ? "  [calls HEAT]" : "")}");
+            }
+        }
+
+        // +3-day heat-spike skill over a couple of summers: if you pre-water every time the +3 forecast
+        // calls a heat spike, how often is it real (payoff) vs a wasted call (false alarm)?
+        int hits = 0, falseAlarms = 0, missed = 0, realSpikes = 0;
+        for (int day = 90; day < 90 + 3 * 360; day++)
+        {
+            int tgt = day + 3;
+            bool forecastHeat = forecast.Predict(day, tgt).PredictedHeatSpike;
+            bool actualHeat = WeatherEvents.IsHeatSpike(weather.Generate(tgt), t);
+            if (actualHeat) realSpikes++;
+            if (forecastHeat && actualHeat) hits++;
+            else if (forecastHeat && !actualHeat) falseAlarms++;
+            else if (!forecastHeat && actualHeat) missed++;
+        }
+        int calls = hits + falseAlarms;
+        Console.WriteLine($"\n  +3-day heat-spike forecast over 3 summers: {realSpikes} real spikes.");
+        Console.WriteLine($"    pre-water-on-call: {calls} calls -> {hits} paid off, {falseAlarms} wasted " +
+                          $"({(calls > 0 ? (double)hits / calls : 0):P0} hit rate)");
+        Console.WriteLine($"    caught flat (spike you weren't warned of at +3): {missed}");
+        Console.WriteLine($"  -> acting on the forecast helps but never guarantees — that gap is the gamble.");
     }
 
     // Step A+.3 (headless equivalent of the by-hand gate): two identical greens taken to MEMBER vs

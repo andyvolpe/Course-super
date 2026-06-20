@@ -93,6 +93,28 @@ via the EditMode Test Runner.
 | Phase 4.2 delegation | delegate-vs-hands-on quality gap, skill-scaled, never closes | ✅ |
 | Phase 4.4 interrupts | quiet days skip; disease break / heat spike stop the skip | ✅ |
 | A+.1 ball physics | faster green rolls farther; firmer green releases more; slope breaks | ✅ |
+| 5.1 weather | weather is seed-deterministic; different seeds differ | ✅ |
+| 5.2 forecast | near-term forecast tighter than far-term; misses happen; today == actual | ✅ |
+| 5.3 events | storm washes out bunkers (rake restores); frost blocks mowing | ✅ |
+
+## Phase 5 — weather, forecast, extreme events (`Assets/Sim/Systems`)
+
+Deepens the proven loop without a new meta-layer: the agronomy already consumed weather; now you
+plan against a fallible forecast.
+
+- **5.1** `WeatherSystem` (already deterministic from Phase 2.2) extended with humidity; it is the
+  real source the pipeline runs on. Determinism test added.
+- **5.2** `Forecast`: a view of the next N days where each value carries an error band that TIGHTENS
+  as the day approaches (`band = perDayBand · daysOut`) and can still miss. Deterministic from the
+  seed. The gap between forecast and reality is the gameplay.
+- **5.3** Extreme events fire pipeline interrupts (heat spike / storm / frost / flash drought) that
+  stop the skip; storms wash out bunkers (a `RakeBunkers` task restores them) and frost blocks mowing
+  until it lifts. `GameDirector.WeatherInterruptsEnabled` gates them (off to isolate clock tests).
+- **5.4** `ForecastHud` (Unity): the forecast strip with visibly widening bands to plan against.
+
+**Forecast-gamble tuning** (headless `Greenkeeper.FeelTest`): heat-spike threshold 91°F gives ~12
+real spikes/yr; the +3-day forecast pays off ~60% of calls, wastes ~40%, and ~8/yr catch you flat —
+useful but fallible.
 
 ## Milestone A finisher — the minimal putt (`Assets/Sim/Physics`)
 
