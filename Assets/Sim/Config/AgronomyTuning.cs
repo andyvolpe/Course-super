@@ -174,6 +174,24 @@ namespace Greenkeeper.Sim.Config
         public double InterruptInfectionThreshold = 15.0; // a green crossing this is a fresh disease break
         public double InterruptClearFraction = 0.5;   // re-arm the disease interrupt once it falls back below this fraction
 
+        // ---- Ball physics (TDD §7): the ball reads the green's maintained state, no new tuning system ----
+        // Putt roll: a full-power putt rolls (Stimp * PuttRollFeetPerStimp) feet — so green SPEED (Stimp,
+        // which you set via mowing/rolling/moisture) directly sets roll distance.
+        public double PuttRollFeetPerStimp = 4.0;
+        public double PuttSlopeRollFactor = 0.8;  // along-aim slope lengthens (downhill) / shortens (uphill) the roll
+        public double PuttBreakFactor = 0.9;      // cross-slope curve per unit slope per foot of roll
+        public double PuttAvgSpeedFps = 5.0;      // for roll-time (animation) only
+
+        // Approach: firmer greens (low moisture/OM -> high firmness) release more; soft greens check up.
+        public double ApproachCarryFeetFull = 60.0;
+        public double ApproachReleaseBaseFt = 2.0;        // release even on a soft green
+        public double ApproachReleaseFirmFactorFt = 18.0; // extra release at full firmness
+        public double ApproachBounceMaxFt = 1.2;          // first-bounce height at full firmness
+
+        // Off-green penalties (hooks for later): rough thins distance, bunkers kill it.
+        public double RoughDistancePenalty = 0.5;
+        public double BunkerDistancePenalty = 0.85;
+
         public double FieldCapacity(SoilType soil, double organicMatterPct)
         {
             double baseFc = soil == SoilType.UsgaSpec ? FieldCapacityUsga : FieldCapacityPushUp;
