@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Headless feel-test runner (Phase 3.0 scaffolding). Drives a green into the ground via the pure
+       sim and prints the dollar-spot curve, so the "does neglect read as a story?" decision gate can
+       be judged without the Unity editor. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>Greenkeeper.FeelTest</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Greenkeeper.Sim/Greenkeeper.Sim.csproj" />
+  </ItemGroup>
+
+</Project>
