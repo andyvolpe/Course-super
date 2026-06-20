@@ -170,9 +170,23 @@ namespace Greenkeeper.Sim.Config
         public double FertilizerDefaultN = 12.0;
 
         // ---- Interrupts (Phase 4.4): when the skip must STOP and pull the player in ----
-        public double HeatSpikeThresholdF = 95.0;     // a day this hot is a crisis to attend
+        public double HeatSpikeThresholdF = 91.0;     // a day this hot is a crisis to attend
         public double InterruptInfectionThreshold = 15.0; // a green crossing this is a fresh disease break
         public double InterruptClearFraction = 0.5;   // re-arm the disease interrupt once it falls back below this fraction
+
+        // ---- Extreme weather events (Phase 5.3) ----
+        public double StormRainThresholdMm = 18.0;    // a downpour: washes out bunkers, cleanup pressure
+        public double FrostThresholdF = 32.0;         // a frost: blocks mowing/play until it lifts
+        public int FlashDroughtDays = 6;              // consecutive hot, rainless days = a flash drought
+        public double FlashDroughtMaxRainMm = 1.0;
+        public double FlashDroughtMinTmaxF = 88.0;
+
+        // ---- Forecast (Phase 5.2): a fallible view of the future that tightens toward the day ----
+        public int ForecastHorizonDays = 5;
+        public double ForecastTempBandPerDayF = 1.2;       // day+5 ~ +/-6F, day+1 ~ +/-1.2F
+        public double ForecastRainBandPerDayMm = 2.4;
+        public double ForecastLeafWetBandPerDayHr = 1.0;
+        public double ForecastHumidityBandPerDay = 0.05;
 
         // ---- Ball physics (TDD §7): the ball reads the green's maintained state, no new tuning system ----
         // Putt roll: a full-power putt rolls (Stimp * PuttRollFeetPerStimp) feet — so green SPEED (Stimp,

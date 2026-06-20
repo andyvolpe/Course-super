@@ -45,6 +45,7 @@ namespace Greenkeeper.Sim.State
         public int DaysSinceAeration;
         public int AerationRecoveryDaysLeft;
         public double RollBonus;          // transient Stimp bonus from rolling (decays)
+        public bool WashedOut;            // bunker washed out by a storm — needs raking (Phase 5.3)
 
         public bool IsGreen => Type == ZoneType.Green;
 
@@ -97,6 +98,7 @@ namespace Greenkeeper.Sim.State
             into.Add(DaysSinceAeration);
             into.Add(AerationRecoveryDaysLeft);
             into.Add(RollBonus);
+            into.Add(WashedOut ? 1.0 : 0.0);
             for (int i = 0; i < Cells.Length; i++) Cells[i].CollectStateValues(into);
         }
     }

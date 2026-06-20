@@ -27,7 +27,11 @@ namespace Greenkeeper.Sim.Systems
         /// </summary>
         public static void ApplyMechanical(ZoneState z, ZoneAction action, AgronomyTuning t)
         {
-            if (z.Type == ZoneType.Bunker) return;
+            if (z.Type == ZoneType.Bunker)
+            {
+                if (action.Rake) z.WashedOut = false; // raking restores a washed-out bunker
+                return;
+            }
             double q = action.EffectiveQuality;
 
             if (action.Mow)

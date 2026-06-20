@@ -43,8 +43,12 @@ namespace Greenkeeper.Sim.Systems
                 rainMm = -System.Math.Log(1.0 - rng.NextDouble() * 0.999) * 6.0;
             }
 
-            // Leaf wetness: overnight dew (more in warm humid summer) plus any rain.
-            double dewHrs = 3.0 + 5.0 * Mathx.Clamp01(0.5 + 0.5 * seasonal) + rng.Range(0.0, 2.0);
+            // Relative humidity: humid transition-zone summers (~60-90%), drier in cold/clear spells.
+            double humidity = Mathx.Clamp(0.55 + 0.20 * seasonal + rng.Range(-0.10, 0.10)
+                                          + (rainMm > 0 ? 0.10 : 0.0), 0.25, 0.95);
+
+            // Leaf wetness: overnight dew (more in warm humid weather) plus any rain.
+            double dewHrs = 2.0 + 8.0 * humidity + rng.Range(0.0, 2.0);
             double wetnessFromRain = rainMm > 0 ? 6.0 : 0.0;
             double leafWetnessHrs = Mathx.Clamp(dewHrs + wetnessFromRain, 0.0, 24.0);
 
@@ -55,6 +59,7 @@ namespace Greenkeeper.Sim.Systems
                 RainMm = Mathx.Max0(rainMm),
                 LeafWetnessHrs = leafWetnessHrs,
                 SolarRa = Mathx.Max0(ra),
+                Humidity = humidity,
             };
         }
     }

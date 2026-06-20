@@ -13,6 +13,7 @@ namespace Greenkeeper.Sim.State
         public double IrrigationMm;  // water applied
         public double FertilizerN;   // nitrogen applied
         public bool Aerate;
+        public bool Rake;            // rake bunkers (clears storm washout)
 
         /// <summary>
         /// Delegation quality in (0,1] scaling the BENEFICIAL part of this action (Phase 4.2 / §4.8).

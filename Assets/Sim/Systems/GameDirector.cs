@@ -31,6 +31,13 @@ namespace Greenkeeper.Sim.Systems
         /// <summary>TEETH SWITCH for the fairness keystone (T4). Always false in normal play.</summary>
         public bool BypassFairnessGate;
 
+        /// <summary>
+        /// Whether extreme-weather events (heat spike / storm / frost / flash drought) fire interrupts
+        /// and apply their effects. On in normal play; tests of the bare clock/skip/disease mechanics
+        /// turn it off to isolate from the weather.
+        /// </summary>
+        public bool WeatherInterruptsEnabled = true;
+
         /// <summary>Raised by an interrupt source to stop a skip loop (stub: stays false by default).</summary>
         public bool InterruptRaised { get; private set; }
         public void RaiseInterrupt() => InterruptRaised = true;
@@ -80,10 +87,14 @@ namespace Greenkeeper.Sim.Systems
             // Per-day RNG stream, forked deterministically per zone.
             var dayRng = new Rng((ulong)unchecked((long)_seed * 2654435761L + Clock.DayIndex + 1));
 
+            // Frost blocks mowing/rolling (and play) for the day until it lifts.
+            bool frost = WeatherInterruptsEnabled && result.Weather.TminF < _tuning.FrostThresholdF;
+
             for (int i = 0; i < Course.Zones.Count; i++)
             {
                 var z = Course.Zones[i];
                 var action = plan.For(z.Id);
+                if (frost) { action.Mow = false; action.Roll = false; } // can't mow frozen turf
                 ctx.Rng = dayRng;
                 var zoneRng = dayRng.Fork((ulong)(i + 1));
 
@@ -109,12 +120,36 @@ namespace Greenkeeper.Sim.Systems
         }
 
         private readonly System.Collections.Generic.HashSet<string> _diseaseFlagged = new System.Collections.Generic.HashSet<string>();
+        private int _hotDryRun; // consecutive hot, rainless days (for flash drought)
 
         private void DetectInterrupts(DayResult result)
         {
-            // Heat spike — a punishing day demands attention regardless of what's automated.
-            if (result.Weather.TmaxF > _tuning.HeatSpikeThresholdF)
-                result.Interrupts.Add($"Heat spike: {result.Weather.TmaxF:F0}F");
+            var w = result.Weather;
+
+            if (WeatherInterruptsEnabled)
+            {
+                // Heat spike — a punishing day demands attention regardless of what's automated.
+                if (WeatherEvents.IsHeatSpike(w, _tuning))
+                    result.Interrupts.Add($"Heat spike: {w.TmaxF:F0}F");
+
+                // Storm — a downpour washes out the bunkers (cleanup pressure) and floods greens.
+                if (WeatherEvents.IsStorm(w, _tuning))
+                {
+                    int washed = 0;
+                    foreach (var z in Course.Zones)
+                        if (z.Type == Greenkeeper.Sim.Config.ZoneType.Bunker) { z.WashedOut = true; washed++; }
+                    result.Interrupts.Add($"Storm: {w.RainMm:F0}mm — {washed} bunkers washed out");
+                }
+
+                // Frost — mowing and play were blocked this day.
+                if (WeatherEvents.IsFrost(w, _tuning))
+                    result.Interrupts.Add($"Frost: {w.TminF:F0}F — mowing/play held");
+
+                // Flash drought — a run of hot, rainless days.
+                if (WeatherEvents.IsHotDry(w, _tuning)) _hotDryRun++; else _hotDryRun = 0;
+                if (_hotDryRun == _tuning.FlashDroughtDays)
+                    result.Interrupts.Add($"Flash drought: {_hotDryRun} hot, dry days");
+            }
 
             // Fresh disease break — a green crossing the threshold (armed once, until it recovers).
             double clear = _tuning.InterruptInfectionThreshold * _tuning.InterruptClearFraction;

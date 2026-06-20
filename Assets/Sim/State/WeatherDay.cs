@@ -9,6 +9,7 @@ namespace Greenkeeper.Sim.State
         public double RainMm;
         public double LeafWetnessHrs;     // hours of canopy wetness (dew + rain)
         public double SolarRa;            // extraterrestrial radiation, mm/day equivalent (Hargreaves)
+        public double Humidity;           // relative humidity 0..1 (drives dew/leaf-wetness, dollar-spot risk)
 
         public double TmeanF => 0.5 * (TminF + TmaxF);
     }

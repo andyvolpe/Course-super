@@ -65,8 +65,9 @@ namespace Greenkeeper.Sim.Crew
                 case TaskType.MowFairways:
                     a.Mow = true; a.MowHeightIn = 0.5; break;
                 case TaskType.RakeBunkers:
+                    a.Rake = true; break; // clears storm washout
                 case TaskType.ChangeCups:
-                    break; // no agronomy delta (cosmetic / sand)
+                    break; // no agronomy delta (cosmetic)
             }
             return a;
         }

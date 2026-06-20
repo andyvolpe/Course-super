@@ -10,11 +10,12 @@ namespace Greenkeeper.Tests
     [TestFixture]
     public class FidelityTests
     {
-        private static GameDirector Director(int seed, int startDay, out CourseState course)
+        // weatherInterrupts=false isolates the disease-break / skip mechanics from weather noise.
+        private static GameDirector Director(int seed, int startDay, out CourseState course, bool weatherInterrupts = false)
         {
             var cfg = CourseConfig.GreensOnly();
             course = CourseFactory.Build(cfg, seed);
-            var dir = new GameDirector(course, seed, cfg.Tuning, cfg.Grass);
+            var dir = new GameDirector(course, seed, cfg.Tuning, cfg.Grass) { WeatherInterruptsEnabled = weatherInterrupts };
             dir.Clock.JumpTo(startDay);
             return dir;
         }
@@ -67,7 +68,7 @@ namespace Greenkeeper.Tests
         public void HeatSpike_RaisesInterrupt_OverASummer()
         {
             // Heat spikes are weather-driven; over a couple of summers at least one >95F day occurs.
-            var dir = Director(seed: 5, startDay: 90, out var course);
+            var dir = Director(seed: 5, startDay: 90, out var course, weatherInterrupts: true);
             bool sawHeat = false;
             for (int i = 0; i < 540 && !sawHeat; i++)
             {

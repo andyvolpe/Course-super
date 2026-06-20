@@ -10,7 +10,13 @@ namespace Greenkeeper.Tests
     public class ClockTests
     {
         private static GameDirector NewDirector(int seed)
-            => new GameDirector(CourseFactory.Build(CourseConfig.Mvp(), seed), seed);
+        {
+            // These exercise the bare clock/skip mechanics, so isolate them from weather interrupts.
+            return new GameDirector(CourseFactory.Build(CourseConfig.Mvp(), seed), seed)
+            {
+                WeatherInterruptsEnabled = false
+            };
+        }
 
         [Test]
         public void NinetyDays_AdvancesToDay90()
