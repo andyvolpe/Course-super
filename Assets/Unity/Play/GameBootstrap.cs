@@ -189,6 +189,9 @@ namespace Greenkeeper.Unity.Play
 
             var economy = ui.AddComponent<EconomyHud>();
             economy.game = _game;
+
+            var tournament = ui.AddComponent<TournamentHud>();
+            tournament.game = _game;
         }
 
         // ---- modes / input ----

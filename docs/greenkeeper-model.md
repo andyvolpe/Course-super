@@ -98,6 +98,7 @@ via the EditMode Test Runner.
 | 5.3 events | storm washes out bunkers (rake restores); frost blocks mowing | ✅ |
 | 6 condition | healthy course scores high, sick course low | ✅ |
 | 6 economy | good management profits; neglect bleeds it back; reputation lags condition | ✅ |
+| 7 tournament | on-spec course grades well, off-spec fails; consistency matters; payout + ladder | ✅ |
 
 ## Phase 6 — economy (`Assets/Sim/Economy`)
 
@@ -112,8 +113,22 @@ Makes mismanagement *cost* money, not just looks. Pure, deterministic, opt-in (`
   for two weeks, then condition collapses (88→6) and cash stalls and bleeds as rounds dry up — the
   deferred-maintenance trap. (Absolute balance is MVP-rough, to tune against play.)
 
-> Remaining for the MVP: **one tournament rung** (a goal to climb — the agronomist's setup spec and
-> the pride payoff). Held for its own turn.
+## Phase 7 — the tournament rung (`Assets/Sim/Tournament`)
+
+The goal to climb toward. Pure, deterministic, opt-in (`GameDirector.Tournament`).
+
+- **`TournamentSpec`** — the agronomist's brief: target Stimp/firmness bands, max-infection,
+  min-density, cross-green consistency tolerance, a deadline day, and a prize/reputation reward.
+- **`TournamentSystem.Evaluate`** — grades the course on the day → score 0–100 → Fail/Bronze/Silver/Gold,
+  rewarding the bands hit consistently across all greens and punishing disease/thin turf.
+- **`TournamentLadder`** — rising rungs; on the event day it grades, pays out to the economy
+  (cash + reputation; a flub dings standing), advances, and the day stops the skip so you're present.
+- "Under the clock" is real: you can't snap Stimp up — the headless demo shows it climbing 10.4 → 11.9
+  over ~10 days of tight mowing/rolling/drying to reach Gold.
+
+**MVP complete.** The full loop: read the course → triage under the hour-squeeze + forecast → walk
+out and putt → condition pays the bills → climb the tournament ladder. Absolute economy/tournament
+balance is rough on purpose, to tune against play. The remaining gate is not code — it's *playing it*.
 
 ## Phase 5 — weather, forecast, extreme events (`Assets/Sim/Systems`)
 

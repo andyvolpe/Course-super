@@ -6,6 +6,7 @@ using Greenkeeper.Sim.Economy;
 using Greenkeeper.Sim.Legibility;
 using Greenkeeper.Sim.State;
 using Greenkeeper.Sim.Systems;
+using Greenkeeper.Sim.Tournament;
 using Greenkeeper.Unity.Config;
 using Greenkeeper.Unity.Save;
 
@@ -41,6 +42,9 @@ namespace Greenkeeper.Unity.Managers
         /// <summary>Course finances (Phase 6): condition -> demand -> revenue, minus costs.</summary>
         public EconomyState Economy => Director?.Economy;
 
+        /// <summary>The tournament ladder to climb (Phase 7).</summary>
+        public TournamentLadder Tournament => Director?.Tournament;
+
         /// <summary>Recent per-step log lines for the debug UI.</summary>
         public readonly List<string> RecentLog = new List<string>();
         public const int MaxLogLines = 24;
@@ -56,6 +60,7 @@ namespace Greenkeeper.Unity.Managers
             {
                 Economy = new EconomyState(econCfg),
                 EconomyConfig = econCfg,
+                Tournament = TournamentLadder.Mvp(),
             };
             Legibility = new LegibilitySystem(cfg.Tuning,
                 assistsEnabled ? DifficultySettings.WithAssists() : DifficultySettings.Full());
@@ -81,6 +86,8 @@ namespace Greenkeeper.Unity.Managers
                 $"{Window.UsedHours:F1}/{Window.BudgetHours:F0}h used" +
                 (Window.CouldNotFitEverything ? $", {Window.Rejected.Count} cut for hours" : ""));
             foreach (var line in result.Log) Log($"  {line}");
+            if (result.Tournament != null)
+                Log($"** TOURNAMENT — {result.Tournament} | prize ${result.Tournament.PrizeAwarded:N0}, rep {result.Tournament.ReputationDelta:+0;-0} **");
             BeginWindow();
             return result;
         }

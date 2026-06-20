@@ -45,6 +45,9 @@ namespace Greenkeeper.Sim.Systems
         public Greenkeeper.Sim.Economy.EconomyState Economy;
         public Greenkeeper.Sim.Economy.EconomyConfig EconomyConfig;
 
+        /// <summary>Optional tournament ladder: graded on its day, payout applied to the economy. Opt-in.</summary>
+        public Greenkeeper.Sim.Tournament.TournamentLadder Tournament;
+
         /// <summary>Raised by an interrupt source to stop a skip loop.</summary>
         public bool InterruptRaised { get; private set; }
         public void RaiseInterrupt() => InterruptRaised = true;
@@ -127,6 +130,18 @@ namespace Greenkeeper.Sim.Systems
                 Greenkeeper.Sim.Economy.EconomySystem.Settle(
                     Economy, Course, result.Weather, plan, Clock.DayIndex, Clock.Season,
                     EconomyConfig ?? Greenkeeper.Sim.Economy.EconomyConfig.Default, _tuning);
+
+            // Step 13 — tournament (opt-in): grade on the day, pay out, and pull the player in.
+            if (Tournament != null)
+            {
+                var tr = Tournament.ProcessDay(Clock.DayIndex, Course, Economy);
+                if (tr != null)
+                {
+                    result.Tournament = tr;
+                    result.Interrupts.Add($"Tournament — {tr}");
+                    RaiseInterrupt();
+                }
+            }
 
             Clock.AdvanceDay();
             return result;

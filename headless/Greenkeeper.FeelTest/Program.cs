@@ -4,6 +4,7 @@ using Greenkeeper.Sim.Crew;
 using Greenkeeper.Sim.Economy;
 using Greenkeeper.Sim.State;
 using Greenkeeper.Sim.Systems;
+using Greenkeeper.Sim.Tournament;
 
 // Phase 3.0 feel-test: drive green-01 into the ground (kept wet, N-starved, never sprayed, mown low)
 // starting in summer, and print the dollar-spot curve day by day. This is the headless equivalent of
@@ -22,6 +23,59 @@ class Program
         ForecastGamble();
         Console.WriteLine();
         EconomyConsequence();
+        Console.WriteLine();
+        TournamentRun();
+    }
+
+    // Phase 7 gate: can you steer the greens to the agronomist's spec under the clock, and does nailing
+    // it pay off? You can't snap Stimp up — it climbs over days of tight mowing/rolling/drying.
+    static void TournamentRun()
+    {
+        Console.WriteLine("TOURNAMENT — steer to the setup spec under the clock, then get graded\n");
+
+        var spec = new TournamentSpec {
+            Name = "Club Championship", DayIndex = 120,
+            StimpMin = 11.0, StimpMax = 12.5, FirmMin = 60, FirmMax = 85,
+            MaxInfection = 5, MinDensity = 82, ConsistencyToleranceStimp = 0.5,
+            PassScore = 70, PrizeMoney = 40000, ReputationGain = 12,
+        };
+
+        var cfg = CourseConfig.GreensOnly();
+        var course = CourseFactory.Build(cfg, 202);
+        var dir = new GameDirector(course, 202, cfg.Tuning, cfg.Grass)
+        {
+            Economy = new EconomyState(EconomyConfig.Default),
+            Tournament = new TournamentLadder(new System.Collections.Generic.List<TournamentSpec> { spec }),
+        };
+        dir.Clock.JumpTo(105); // ~15 days to prep
+        var g = course.Get("green-01");
+
+        Console.WriteLine($"  Spec: Stimp {spec.StimpMin}-{spec.StimpMax}, firm {spec.FirmMin}-{spec.FirmMax}, day {spec.DayIndex}.");
+        Console.WriteLine("  Tournament-prep routine (tight mow + roll + dry down):");
+        TournamentResult fired = null;
+        while (dir.Clock.DayIndex <= spec.DayIndex)
+        {
+            int day = dir.Clock.DayIndex;
+            var plan = new DayPlan();
+            foreach (var z in course.Greens)
+            {
+                var a = ZoneAction.None;
+                a.Mow = true; a.MowHeightIn = 0.100;                                  // tight cut -> speed
+                a.Roll = true;                                                         // roll -> speed/firm
+                a.IrrigationMm = Math.Max(0, (11.0 - z.SoilMoisturePct) / 0.9);        // dry -> firm/fast
+                a.FertilizerN = z.NitrogenPct < 30 ? 8 : 0;
+                a.Spray = (z.MaxInfection > 0 || z.MeanPressure > AgronomyTuning.Default.TellPressureThreshold);
+                plan.Set(z.Id, a);
+            }
+            var res = dir.ResolveDay(plan);
+            if (res.Tournament != null) fired = res.Tournament;
+            if (day % 3 == 0 || res.Tournament != null)
+                Console.WriteLine($"    day {day}: green-01 Stimp {g.Stimp:F1}  firm {g.FirmnessPct:F0}  density {g.DensityPct:F0}");
+        }
+
+        Console.WriteLine($"\n  RESULT: {fired}  (mean Stimp {fired.MeanStimp:F1} ±{fired.StimpStdev:F2}, firm {fired.MeanFirmness:F0})");
+        Console.WriteLine($"    prize ${fired.PrizeAwarded:N0}, reputation {fired.ReputationDelta:+0;-0}, cash now ${dir.Economy.Cash:N0}");
+        Console.WriteLine("  -> the payoff is the green you built reaching a number the agronomist set.");
     }
 
     // Phase 6 gate: does mismanagement HURT the books? Show cash + condition over a summer, well-run

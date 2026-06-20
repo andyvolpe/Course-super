@@ -31,6 +31,9 @@ namespace Greenkeeper.Sim.Systems
         public readonly List<string> Interrupts = new List<string>();
         public bool IsInterruptDay => Interrupts.Count > 0;
 
+        /// <summary>The tournament graded today, if any (Phase 7).</summary>
+        public Greenkeeper.Sim.Tournament.TournamentResult Tournament;
+
         public void Step(string message) => Log.Add(message);
     }
 }
