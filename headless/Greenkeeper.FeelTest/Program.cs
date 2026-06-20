@@ -1,6 +1,7 @@
 using System;
 using Greenkeeper.Sim.Config;
 using Greenkeeper.Sim.Crew;
+using Greenkeeper.Sim.Economy;
 using Greenkeeper.Sim.State;
 using Greenkeeper.Sim.Systems;
 
@@ -19,6 +20,62 @@ class Program
         InterlockDemo();
         Console.WriteLine();
         ForecastGamble();
+        Console.WriteLine();
+        EconomyConsequence();
+    }
+
+    // Phase 6 gate: does mismanagement HURT the books? Show cash + condition over a summer, well-run
+    // vs neglected, so the consequence is money, not just a brown green.
+    static void EconomyConsequence()
+    {
+        Console.WriteLine("ECONOMY — condition -> rounds -> revenue (so neglect costs cash)\n");
+        Console.WriteLine("  day | GOOD cond  cash        | NEGLECT cond  cash");
+        Console.WriteLine("  ----+------------------------+---------------------");
+
+        var (gDir, gCourse) = NewEcoRun();
+        var (nDir, nCourse) = NewEcoRun();
+        for (int d = 0; d < 90; d++)
+        {
+            gDir.ResolveDay(EcoGoodPlan(gCourse));
+            nDir.ResolveDay(new DayPlan()); // neglect: keep the lights on, do nothing
+            if (d % 15 == 14 || d == 0)
+            {
+                var gl = gDir.Economy.Latest; var nl = nDir.Economy.Latest;
+                Console.WriteLine($"  {d + 1,3} | {gl.ConditionIndex,6:F0}   ${gl.Cash,10:N0} | {nl.ConditionIndex,6:F0}     ${nl.Cash,10:N0}");
+            }
+        }
+        double good = gDir.Economy.Cash, bad = nDir.Economy.Cash;
+        Console.WriteLine($"\n  End of summer: well-run ${good:N0}  vs  neglected ${bad:N0}  " +
+                          $"(neglect left ${good - bad:N0} on the table).");
+        Console.WriteLine($"  -> the green still has to pay — condition is revenue, and the bill comes either way.");
+    }
+
+    static (GameDirector, CourseState) NewEcoRun()
+    {
+        var cfg = CourseConfig.Mvp();
+        var course = CourseFactory.Build(cfg, 909);
+        var dir = new GameDirector(course, 909, cfg.Tuning, cfg.Grass)
+        {
+            Economy = new EconomyState(EconomyConfig.Default),
+            EconomyConfig = EconomyConfig.Default,
+        };
+        dir.Clock.JumpTo(90);
+        return (dir, course);
+    }
+
+    static DayPlan EcoGoodPlan(CourseState course)
+    {
+        var plan = new DayPlan();
+        foreach (var z in course.Greens)
+        {
+            var a = ZoneAction.None;
+            a.Mow = true; a.MowHeightIn = 0.125;
+            a.IrrigationMm = Math.Max(0, (16.0 - z.SoilMoisturePct) / 0.9);
+            a.FertilizerN = z.NitrogenPct < 35 ? 12 : 0;
+            a.Spray = (z.MaxInfection > 0 || z.MeanPressure > AgronomyTuning.Default.TellPressureThreshold);
+            plan.Set(z.Id, a);
+        }
+        return plan;
     }
 
     // Phase 5 gate: does the forecast gamble bite? Show the forecast tightening toward a day (and

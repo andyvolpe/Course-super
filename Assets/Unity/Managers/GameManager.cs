@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using Greenkeeper.Sim.Config;
 using Greenkeeper.Sim.Crew;
+using Greenkeeper.Sim.Economy;
 using Greenkeeper.Sim.Legibility;
 using Greenkeeper.Sim.State;
 using Greenkeeper.Sim.Systems;
@@ -37,6 +38,9 @@ namespace Greenkeeper.Unity.Managers
         /// <summary>The fallible weather forecast the player plans against (Phase 5).</summary>
         public Forecast Forecast { get; private set; }
 
+        /// <summary>Course finances (Phase 6): condition -> demand -> revenue, minus costs.</summary>
+        public EconomyState Economy => Director?.Economy;
+
         /// <summary>Recent per-step log lines for the debug UI.</summary>
         public readonly List<string> RecentLog = new List<string>();
         public const int MaxLogLines = 24;
@@ -47,7 +51,12 @@ namespace Greenkeeper.Unity.Managers
         {
             CourseConfig cfg = courseConfig != null ? courseConfig.ToConfig() : CourseConfig.Mvp();
             var course = CourseFactory.Build(cfg, weatherSeed);
-            Director = new GameDirector(course, weatherSeed, cfg.Tuning, cfg.Grass);
+            var econCfg = EconomyConfig.Default;
+            Director = new GameDirector(course, weatherSeed, cfg.Tuning, cfg.Grass)
+            {
+                Economy = new EconomyState(econCfg),
+                EconomyConfig = econCfg,
+            };
             Legibility = new LegibilitySystem(cfg.Tuning,
                 assistsEnabled ? DifficultySettings.WithAssists() : DifficultySettings.Full());
             Crew = CrewMember.DefaultCrew();

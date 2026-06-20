@@ -38,7 +38,14 @@ namespace Greenkeeper.Sim.Systems
         /// </summary>
         public bool WeatherInterruptsEnabled = true;
 
-        /// <summary>Raised by an interrupt source to stop a skip loop (stub: stays false by default).</summary>
+        /// <summary>
+        /// Optional economy: when set, each resolved day settles the books (condition -> demand ->
+        /// revenue, minus the day's costs). Opt-in so headless determinism/agronomy tests are unaffected.
+        /// </summary>
+        public Greenkeeper.Sim.Economy.EconomyState Economy;
+        public Greenkeeper.Sim.Economy.EconomyConfig EconomyConfig;
+
+        /// <summary>Raised by an interrupt source to stop a skip loop.</summary>
         public bool InterruptRaised { get; private set; }
         public void RaiseInterrupt() => InterruptRaised = true;
         public void ClearInterrupt() => InterruptRaised = false;
@@ -114,6 +121,12 @@ namespace Greenkeeper.Sim.Systems
 
             // Step 11 — interrupts. Crises always surface to the player, overriding any delegation/skip.
             DetectInterrupts(result);
+
+            // Step 12 — economy (opt-in): condition -> demand -> revenue, minus the day's costs.
+            if (Economy != null)
+                Greenkeeper.Sim.Economy.EconomySystem.Settle(
+                    Economy, Course, result.Weather, plan, Clock.DayIndex, Clock.Season,
+                    EconomyConfig ?? Greenkeeper.Sim.Economy.EconomyConfig.Default, _tuning);
 
             Clock.AdvanceDay();
             return result;

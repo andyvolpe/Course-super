@@ -96,6 +96,24 @@ via the EditMode Test Runner.
 | 5.1 weather | weather is seed-deterministic; different seeds differ | ✅ |
 | 5.2 forecast | near-term forecast tighter than far-term; misses happen; today == actual | ✅ |
 | 5.3 events | storm washes out bunkers (rake restores); frost blocks mowing | ✅ |
+| 6 condition | healthy course scores high, sick course low | ✅ |
+| 6 economy | good management profits; neglect bleeds it back; reputation lags condition | ✅ |
+
+## Phase 6 — economy (`Assets/Sim/Economy`)
+
+Makes mismanagement *cost* money, not just looks. Pure, deterministic, opt-in (`GameDirector.Economy`).
+
+- **`ConditionSystem`** scores course playing condition 0–100 from the greens (density, health,
+  debt, speed, firmness) — the bridge from agronomy to business.
+- **`EconomySystem.Settle`** each day: condition → demand (× reputation × weather × season) → rounds
+  → revenue; minus the day's costs (overhead + materials from the plan). Reputation is a slow EMA of
+  condition, so standing is earned and lost over time, not snapped.
+- Headless trajectory (`Greenkeeper.FeelTest`): a well-run summer ends ~$697k; neglect runs *cheaper*
+  for two weeks, then condition collapses (88→6) and cash stalls and bleeds as rounds dry up — the
+  deferred-maintenance trap. (Absolute balance is MVP-rough, to tune against play.)
+
+> Remaining for the MVP: **one tournament rung** (a goal to climb — the agronomist's setup spec and
+> the pride payoff). Held for its own turn.
 
 ## Phase 5 — weather, forecast, extreme events (`Assets/Sim/Systems`)
 

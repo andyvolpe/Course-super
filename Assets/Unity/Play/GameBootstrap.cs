@@ -186,6 +186,9 @@ namespace Greenkeeper.Unity.Play
             var legibility = ui.AddComponent<LegibilityHud>();
             legibility.game = _game;
             legibility.inspection = _inspect;
+
+            var economy = ui.AddComponent<EconomyHud>();
+            economy.game = _game;
         }
 
         // ---- modes / input ----
