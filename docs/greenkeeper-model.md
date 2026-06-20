@@ -83,5 +83,32 @@ via the EditMode Test Runner.
 | Phase 2.3 | mismanaged green gets sick, well-kept stays clean | ✅ |
 | **T1** Determinism | same seed+plan → deep-equal final state | ✅ |
 | **T2** Invariant fuzz | 12,000 random days, no NaN/out-of-range/throw | ✅ |
-| **T3** Behavioural | mean bad infection > 2× good over 300 seeds (≈ 55 vs 0) | ✅ |
+| **T3** Behavioural | mean bad infection > 2× good over 300 seeds (≈ 100 vs 0) | ✅ |
 | **T4** Fairness | 300 seeds: no expression without a tell; teeth check detects ungated ones | ✅ |
+| Phase 3 survival | a managed green stays alive a full season; mismanagement thins it | ✅ |
+| Phase 3.1 fairness | N-push == vigour by colour; starved paler; debt not encoded | ✅ |
+| Phase 3.2 gate | hidden state stays hidden until scouted/metered; debt never on full | ✅ |
+| Phase 3.3 assists | assists change surfacing only — sim state byte-identical (determinism) | ✅ |
+
+## Phase 3 — legibility (`Assets/Sim/Legibility`)
+
+Built on top of the agronomy core; all pure C# and headless-tested.
+
+- **3.0 tuning pass.** The first neglect feel-test lurched fine-to-dead (summer ET was
+  ~16 VWC%/day, so greens died of drought-debt before disease could develop). Fixed: a
+  single realistic `MmToVwcPct` conversion for rain/irrigation/ET, lower weather radiation
+  (summer ET ~6–7 mm/day), slower turf-debt offences + density bleed, baseline+starvation
+  dollar-spot N susceptibility, and an infection→thinning link. The curve now reads as a
+  ramp: ~6-day latent pressure build → tell + infection (~day 6–7) → visible thinning
+  (~day 14) → collapse (~day 36); a well-kept green survives.
+- **`LegibilityMapping`** — state → honest `TellAppearance` per sub-cell. Tells NARROW
+  (dark green is ambiguous between vigour and N-push); turf debt is never an input.
+- **`LegibilitySystem`** — THE single gate. Free visual tells always; infection / exact
+  moisture / nutrients only when earned via scout / meter / soil-test; turf debt never
+  surfaced on full difficulty. Read-only w.r.t. the sim.
+- **`DifficultySettings`** — the assist layer changes only *surfacing* (debt bar, threat
+  telegraph, auto-scout), never the simulation.
+
+The Unity layer (`Assets/Unity/Rendering` + `Play` + `UI`) is a dumb consumer: the
+`GreenSurface` URP shader renders the per-cell tell channels, `GreenRenderer` pushes them
+through the gate (one material per sub-cell), and first-person inspection earns deeper reads.
