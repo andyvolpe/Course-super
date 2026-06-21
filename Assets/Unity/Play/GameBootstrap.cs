@@ -582,7 +582,9 @@ namespace Greenkeeper.Unity.Play
             DrapeOntoTerrain(mesh, parent, localPos, lift); // follow the rolling ground (+lift)
             JitterUV(mesh, zoneId.GetHashCode());           // rotate/offset UVs so neighbours don't match
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            go.AddComponent<MeshRenderer>().sharedMaterial = SharedSurfaceMaterial(matKey, color);
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = SharedSurfaceMaterial(matKey, color);
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; // flat ground: no self-shadow seam
             go.AddComponent<MeshCollider>().sharedMesh = mesh; // walkable + ball/look raycast target
             var sr = go.AddComponent<SurfaceRenderer>();
             sr.game = _game;
@@ -883,6 +885,7 @@ namespace Greenkeeper.Unity.Play
             m.mainTexture = tex;
             if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.08f);
             if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.08f);
+            if (m.HasProperty("_Cull")) m.SetFloat("_Cull", 0f); // double-sided: no black back-edge at seams
             _turfMats[key] = m;
             return m;
         }
