@@ -28,6 +28,17 @@ Put each asset at `Assets/Resources/PolyHaven/<Name>` (the `Resources` folder is
 Surfaces are still **tinted by turf health** at runtime (the legibility tells multiply the texture),
 and texture tiling is auto-set (~1 repeat / 2 m), so a grass material reads as colour-graded turf.
 
+## Fastest path: the built-in importer
+
+**Window > Greenkeeper > Poly Haven Importer.** Paste a slug (the URL tail from
+polyhaven.com, e.g. `aerial_grass_rock` or `kloofendal_43d_clear`), pick a resolution and the
+target surface key, and hit Import. It downloads the maps from Poly Haven's CDN, imports them
+(setting the normal map correctly), builds a lit material — or a Skybox material for an HDRI — and
+saves it straight to `Assets/Resources/PolyHaven/<Key>.mat`, where the play test auto-loads it.
+Needs internet; everything it writes is normal project assets you then commit (see Git LFS below).
+
+The manual steps below do the same thing by hand if you'd rather.
+
 ## Steps
 
 ### Textures (turf, sand) → a Material
