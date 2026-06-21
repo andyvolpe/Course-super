@@ -27,6 +27,15 @@ namespace Greenkeeper.Unity.Play
         public int holesToRender = 18;    // full holes laid out tee -> fairway -> approach -> green
         public float cellSizeM = 2.0f;
 
+        // Real-scale layout (metres). Holes are 100–530 m long, so the grid cells are big.
+        private const int Cols = 6;
+        private const float LaneW = 110f;   // spacing between holes across (each hole ~30 m playing + rough/trees)
+        private const float RowD = 600f;    // spacing down — must exceed the longest hole (~526 m) + green
+        private const float YardM = 0.9144f;
+        // 18-hole par mix: 12 par-4, 3 par-3, 3 par-5.
+        private static readonly int[] Pars = { 4, 4, 3, 4, 5, 4, 4, 3, 4, 4, 5, 4, 3, 4, 4, 5, 4, 4 };
+        private static int ParForHole(int hole) => Pars[(hole - 1) % Pars.Length];
+
         private GameManager _game;
         private Terrain _terrain;          // Unity Terrain ground (null => mesh-ground fallback)
         private float _terrMinX, _terrMinZ, _terrW = 1f, _terrL = 1f;
@@ -80,26 +89,21 @@ namespace Greenkeeper.Unity.Play
 
                 var holesViz = new List<HoleViz>();
                 int holes = Mathf.Max(1, holesToRender);
-                // Snaking grid routing: rows of 6 holes, alternate rows face back the other way (like a
-                // real out-and-back nine), so the course reads as a field of holes you can walk between.
-                const int cols = 6;
-                const float laneW = 30f, rowD = 64f;
+                // Grid routing: rows of 6 holes, all teeing toward +Z. Holes are long (up to ~526 m), so
+                // rows are spaced far enough apart that holes never overlap.
                 for (int i = 0; i < holes; i++)
                 {
                     int hole = i + 1;
                     if (_game.Course.Get($"green-{hole:00}") == null) continue;
-                    int row = i / cols, col = i % cols;
-                    bool back = (row % 2) == 1;            // alternate direction each row
-                    float x = (back ? (cols - 1 - col) : col) * laneW;
-                    float z = row * rowD;
-                    float yaw = back ? 180f : 0f;          // back rows point -Z
-                    var hv = BuildHole(hole, new Vector3(x, SurfaceGroundY(x, z), z), yaw);
+                    int row = i / Cols, col = i % Cols;
+                    float x = col * LaneW, z = row * RowD;
+                    var hv = BuildHole(hole, new Vector3(x, SurfaceGroundY(x, z), z), 0f);
                     if (hv != null) holesViz.Add(hv);
                 }
                 // Perimeter forest: Terrain tree instances handle it when a pack is imported; otherwise
                 // (mesh ground, or terrain but no tree models) scatter our own so it's never barren.
                 if (_terrain == null || _treePrefabs == null || _treePrefabs.Length == 0)
-                    BuildPerimeterTrees(maxXForTrees: (6 - 1) * 30f, maxZForTrees: ((holes + 5) / 6 - 1) * 64f + 50f);
+                    BuildPerimeterTrees(maxXForTrees: (Cols - 1) * LaneW, maxZForTrees: ((holes + Cols - 1) / Cols - 1) * RowD + 540f);
 
                 // Real geometry grass + terrain trees across the rough + surrounds (after holes so the
                 // mask is filled — trees/grass avoid the greens/fairways/tees/bunkers).
@@ -168,10 +172,10 @@ namespace Greenkeeper.Unity.Play
 
         private void BuildBounds(out float minX, out float minZ, out float width, out float length)
         {
-            int rows = Mathf.CeilToInt(Mathf.Max(1, holesToRender) / 6f);
-            minX = -40f; minZ = -40f;
-            width = (6 - 1) * 30f + 80f;
-            length = (rows - 1) * 64f + 50f + 80f;
+            int rows = Mathf.CeilToInt(Mathf.Max(1, holesToRender) / (float)Cols);
+            minX = -100f; minZ = -100f;
+            width = (Cols - 1) * LaneW + 200f;
+            length = (rows - 1) * RowD + 560f + 200f; // + longest hole + margins
         }
 
         /// <summary>
@@ -261,7 +265,7 @@ namespace Greenkeeper.Unity.Play
 
             var rnd = new System.Random(909);
             var list = new List<TreeInstance>();
-            for (int i = 0; i < 1400; i++)
+            for (int i = 0; i < 3500; i++)
             {
                 float nx = (float)rnd.NextDouble(), nz = (float)rnd.NextDouble();
                 int mx = Mathf.Clamp(Mathf.RoundToInt(nx * (GrassMaskRes - 1)), 0, GrassMaskRes - 1);
@@ -327,8 +331,8 @@ namespace Greenkeeper.Unity.Play
             try
             {
                 var data = terrain.terrainData;
-                int res = 256;
-                data.SetDetailResolution(res, 16);
+                int res = 1024; // finer over the large real-scale course so grass isn't sparse
+                data.SetDetailResolution(res, 32);
 
                 var protos = new List<DetailPrototype>();
                 foreach (var go in Resources.LoadAll<GameObject>("Grass"))      // real grass MESHES (NM etc.)
@@ -454,30 +458,35 @@ namespace Greenkeeper.Unity.Play
             var rnd = new System.Random(hole * 9176 + 13);
             float R() => (float)rnd.NextDouble();
 
-            float length = 30f + 16f * R();
+            // Real-scale length by par (yards -> metres). Par 3 plays straight; 4/5 can dogleg.
+            int par = ParForHole(hole);
+            float yards = par == 3 ? Mathf.Lerp(130f, 195f, R())
+                        : par == 5 ? Mathf.Lerp(480f, 560f, R())
+                                   : Mathf.Lerp(310f, 450f, R());
+            float length = yards * YardM;
             float side = R() < 0.5f ? -1f : 1f;
-            float bend = (3f + 7f * R()) * side;   // dogleg
+            float bend = par == 3 ? 0f : Mathf.Lerp(0.05f, 0.13f, R()) * length * side; // lateral dogleg
 
             // Curved centreline (local XZ; +z up the hole), smoothed to a polyline.
             var ctrl = new List<Vector2>
             {
                 new Vector2(0f, 0f),
-                new Vector2(bend * 0.25f, length * 0.35f),
-                new Vector2(bend, length * 0.72f),
+                new Vector2(bend * 0.25f, length * 0.40f),
+                new Vector2(bend, length * 0.75f),
                 new Vector2(bend * 0.95f, length),
             };
-            var center = ProcMesh.Smooth(ctrl, 10);
+            var center = ProcMesh.Smooth(ctrl, Mathf.Clamp(Mathf.RoundToInt(length / 12f), 10, 48));
             int m = center.Count;
 
-            // Half-widths bulge in the middle (narrow tee + green).
+            // Half-widths bulge in the middle (~28 m fairway), narrowing at the tee + green; rough flanks it.
             var fairHalf = new float[m];
             var roughHalf = new float[m];
             for (int i = 0; i < m; i++)
             {
                 float t = i / (float)(m - 1);
-                float w = Mathf.Max(2.6f, Mathf.Lerp(3.0f, 5.2f, Mathf.Sin(t * Mathf.PI)));
+                float w = Mathf.Max(9f, Mathf.Lerp(11f, 16f, Mathf.Sin(t * Mathf.PI)));
                 fairHalf[i] = w;
-                roughHalf[i] = w + 6.5f;
+                roughHalf[i] = w + 14f;
             }
 
             // Rough corridor then fairway on top — both draped onto the rolling terrain. Tiny lifts so
@@ -486,33 +495,33 @@ namespace Greenkeeper.Unity.Play
             if (_game.Course.Get($"fairway-{h}") != null)
                 BuildMesh(T, $"fairway-{h}", "Fairway", ProcMesh.Ribbon(center, fairHalf, 5f), 0.02f, new Color(0.22f, 0.44f, 0.18f));
 
-            // Tee box (barely proud of grade).
+            // Tee box (~7.3 x 11 m).
             Vector2 teeP = center[0];
             if (_game.Course.Get($"tee-{h}") != null)
-                BuildBlob(T, $"tee-{h}", "Tee", teeP, ProcMesh.EllipseRadii(2.4f, 3.0f, 24, 0.08f, hole * 31 + 1, 0f), 0.04f, new Color(0.20f, 0.46f, 0.20f));
+                BuildBlob(T, $"tee-{h}", "Tee", teeP, ProcMesh.EllipseRadii(3.7f, 5.5f, 28, 0.05f, hole * 31 + 1, 0f), 0.04f, new Color(0.20f, 0.46f, 0.20f));
 
-            // Green complex: apron, then a kidney green just proud of grade (no floating disc).
+            // Green complex: apron, then a kidney green (~23 m across) just proud of grade.
             Vector2 greenP = center[m - 1];
             if (_game.Course.Get($"approach-{h}") != null)
             {
-                Vector2 apr = Vector2.Lerp(center[m - 2], greenP, 0.35f);
-                BuildBlob(T, $"approach-{h}", "Approach", apr, ProcMesh.EllipseRadii(4.5f, 3.5f, 36, 0.07f, hole * 53 + 7, 0f), 0.03f, new Color(0.20f, 0.45f, 0.19f));
+                Vector2 apr = Vector2.Lerp(center[m - 2], greenP, 0.3f);
+                BuildBlob(T, $"approach-{h}", "Approach", apr, ProcMesh.EllipseRadii(9f, 7f, 36, 0.06f, hole * 53 + 7, 0f), 0.03f, new Color(0.20f, 0.45f, 0.19f));
                 Vector3 aw = T.TransformPoint(new Vector3(apr.x, 0f, apr.y));
-                StampGrassMask(aw.x, aw.z, 5.5f);
+                StampGrassMask(aw.x, aw.z, 10f);
             }
-            float gx = 4.2f + 1.2f * R(), gz = 4.8f + 1.4f * R();
+            float gx = 10.5f + 2f * R(), gz = 11f + 2.5f * R(); // ~21–27 m diameter
             var greenObj = BuildBlob(T, $"green-{h}", "Green", greenP,
-                ProcMesh.EllipseRadii(gx, gz, 64, 0.04f, hole * 71 + 3, 0.20f), 0.04f, new Color(0.16f, 0.42f, 0.16f));
+                ProcMesh.EllipseRadii(gx, gz, 72, 0.04f, hole * 71 + 3, 0.18f), 0.04f, new Color(0.16f, 0.42f, 0.16f));
             var gsr = greenObj.GetComponent<SurfaceRenderer>();
             gsr.spatialGreen = true; gsr.greenHalf = new Vector2(gx, gz);
             greenObj.transform.localRotation = Quaternion.Euler(0f, 30f * R(), 0f); // yaw only — tilt caused floating
 
             // Bunkers (organic, sunken blobs): two greenside, one on the inside of the dogleg.
             Vector2 perp = Perp(center[m - 1] - center[m - 2]);
-            BuildBunker($"bunker-{h}-1", T, greenP + perp * (gx + 2.5f) + new Vector2(0f, -1.5f), hole * 11 + 1);
-            BuildBunker($"bunker-{h}-2", T, greenP - perp * (gx + 2.5f) + new Vector2(0f, -2.5f), hole * 11 + 2);
+            BuildBunker($"bunker-{h}-1", T, greenP + perp * (gx + 4f) + new Vector2(0f, -3f), hole * 11 + 1);
+            BuildBunker($"bunker-{h}-2", T, greenP - perp * (gx + 4f) + new Vector2(0f, -5f), hole * 11 + 2);
             int ci = Mathf.Clamp(Mathf.RoundToInt(m * 0.6f), 1, m - 2);
-            BuildBunker($"bunker-{h}-3", T, center[ci] - Perp(center[ci + 1] - center[ci - 1]) * (fairHalf[ci] + 2f) * side, hole * 11 + 3);
+            BuildBunker($"bunker-{h}-3", T, center[ci] - Perp(center[ci + 1] - center[ci - 1]) * (fairHalf[ci] + 4f) * side, hole * 11 + 3);
 
             // Pin + cup sit on the green surface.
             Vector3 greenWorld = T.TransformPoint(new Vector3(greenP.x, 0f, greenP.y));
@@ -531,8 +540,8 @@ namespace Greenkeeper.Unity.Play
                 Vector3 w = T.TransformPoint(new Vector3(center[i].x, 0f, center[i].y));
                 StampGrassMask(w.x, w.z, fairHalf[i] + 1f);
             }
-            StampGrassMask(teeWorld.x, teeWorld.z, 3.5f);
-            StampGrassMask(greenWorld.x, greenWorld.z, Mathf.Max(gx, gz) + 1.5f);
+            StampGrassMask(teeWorld.x, teeWorld.z, 7f);
+            StampGrassMask(greenWorld.x, greenWorld.z, Mathf.Max(gx, gz) + 2f);
 
             return new HoleViz
             {
@@ -551,10 +560,10 @@ namespace Greenkeeper.Unity.Play
         private void BuildBunker(string zoneId, Transform parent, Vector2 p, int seed)
         {
             if (_game.Course.Get(zoneId) == null) return;
-            float br = 1.4f + 0.8f * (float)new System.Random(seed).NextDouble();
-            BuildBlob(parent, zoneId, "Bunker", p, ProcMesh.EllipseRadii(br, br * 0.8f, 24, 0.16f, seed, 0f), -0.04f, new Color(0.82f, 0.74f, 0.55f));
+            float br = 4f + 4f * (float)new System.Random(seed).NextDouble(); // ~8–16 m bunkers
+            BuildBlob(parent, zoneId, "Bunker", p, ProcMesh.EllipseRadii(br, br * 0.75f, 28, 0.16f, seed, 0f), -0.06f, new Color(0.82f, 0.74f, 0.55f));
             Vector3 bw = parent.TransformPoint(new Vector3(p.x, 0f, p.y));
-            StampGrassMask(bw.x, bw.z, br + 0.6f); // no tall grass in the sand
+            StampGrassMask(bw.x, bw.z, br + 1f); // no tall grass in the sand
         }
 
         /// <summary>A rounded blob surface (green/tee/approach/bunker) centred at a local XZ point.</summary>
@@ -618,16 +627,16 @@ namespace Greenkeeper.Unity.Play
             pole.name = "Pin";
             Destroy(pole.GetComponent<Collider>());
             pole.transform.SetParent(parent, false);
-            pole.transform.localPosition = localBase + new Vector3(0f, 0.9f, 0f);
-            pole.transform.localScale = new Vector3(0.03f, 0.9f, 0.03f); // ~1.8 m flagstick
+            pole.transform.localPosition = localBase + new Vector3(0f, 1.067f, 0f);
+            pole.transform.localScale = new Vector3(0.02f, 1.067f, 0.02f); // 7 ft (2.13 m) flagstick
             var pm = SolidMaterial(new Color(0.92f, 0.92f, 0.92f)); if (pm != null) pole.GetComponent<Renderer>().material = pm;
 
             var flag = GameObject.CreatePrimitive(PrimitiveType.Quad);
             flag.name = "Flag";
             Destroy(flag.GetComponent<Collider>());
             flag.transform.SetParent(parent, false);
-            flag.transform.localPosition = localBase + new Vector3(0.28f, 1.62f, 0f);
-            flag.transform.localScale = new Vector3(0.55f, 0.35f, 1f);
+            flag.transform.localPosition = localBase + new Vector3(0.25f, 1.95f, 0f);
+            flag.transform.localScale = new Vector3(0.5f, 0.35f, 1f);
             flag.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
             var fm = SolidMaterial(new Color(0.85f, 0.12f, 0.14f)); if (fm != null) flag.GetComponent<Renderer>().material = fm;
         }
@@ -735,6 +744,7 @@ namespace Greenkeeper.Unity.Play
             camGo.transform.SetParent(player.transform, false);
             camGo.transform.localPosition = new Vector3(0f, 1.6f, 0f);
             camGo.transform.localRotation = Quaternion.identity;
+            cam.farClipPlane = 2500f; // see across the full-scale course
 
             _fp = player.AddComponent<FirstPersonController>(); // Awake finds the child camera
 
@@ -753,15 +763,15 @@ namespace Greenkeeper.Unity.Play
 
             var ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             ball.name = "Ball";
-            ball.transform.localScale = Vector3.one * 0.12f;
+            ball.transform.localScale = Vector3.one * 0.0427f; // 1.68 in golf ball
             Destroy(ball.GetComponent<Collider>()); // ball is kinematic-animated
             var ballMat = SolidMaterial(Color.white); if (ballMat != null) ball.GetComponent<Renderer>().material = ballMat;
 
             var cup = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cup.name = "Cup";
-            cup.transform.localScale = new Vector3(0.11f, 0.02f, 0.11f);
+            cup.transform.localScale = new Vector3(0.108f, 0.05f, 0.108f); // 4.25 in cup
             Destroy(cup.GetComponent<Collider>());
-            var cupMat = SolidMaterial(Color.black); if (cupMat != null) cup.GetComponent<Renderer>().material = cupMat;
+            var cupMat = SolidMaterial(Color.white); if (cupMat != null) cup.GetComponent<Renderer>().material = cupMat; // white inside
 
             var tees = new Vector3[holes.Count];
             var cups = new Vector3[holes.Count];
