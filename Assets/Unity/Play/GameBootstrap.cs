@@ -152,25 +152,55 @@ namespace Greenkeeper.Unity.Play
 
         private void BuildLighting()
         {
-            // Optional Poly Haven HDRI sky (Assets/Resources/PolyHaven/Skybox.mat). Lights the scene too.
+            // --- Sun first (a procedural sky samples it for the disk + ambient) ---
+            Light l = FindFirstObjectByType<Light>();
+            if (l == null || l.type != LightType.Directional)
+            {
+                var go = new GameObject("Sun");
+                l = go.AddComponent<Light>();
+                l.type = LightType.Directional;
+            }
+            l.intensity = 1.15f;
+            l.color = new Color(1.00f, 0.97f, 0.90f);                 // warm late-morning sun
+            l.transform.rotation = Quaternion.Euler(42f, -28f, 0f);   // lower angle => longer, softer shadows
+            l.shadows = LightShadows.Soft;
+            l.shadowStrength = 0.62f;                                  // shadows read, but never crushed-black
+
+            // --- Sky: a Poly Haven HDRI if dropped in, else a soft procedural daytime sky ---
             var sky = Resources.Load<Material>("PolyHaven/Skybox");
+            if (sky == null)
+            {
+                var proc = Shader.Find("Skybox/Procedural");
+                if (proc != null)
+                {
+                    sky = new Material(proc);
+                    if (sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 1.1f);
+                    if (sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.25f);
+                    if (sky.HasProperty("_SunSize")) sky.SetFloat("_SunSize", 0.05f);
+                    if (sky.HasProperty("_SkyTint")) sky.SetColor("_SkyTint", new Color(0.52f, 0.62f, 0.74f));
+                    if (sky.HasProperty("_GroundColor")) sky.SetColor("_GroundColor", new Color(0.36f, 0.37f, 0.32f));
+                }
+            }
             if (sky != null)
             {
                 RenderSettings.skybox = sky;
-                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Skybox;
-                DynamicGI.UpdateEnvironment();
+                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Skybox; // soft sky-lit fill
             }
-            else
+            else // no skybox available — a three-band gradient still beats flat grey ambient
             {
-                RenderSettings.ambientLight = new Color(0.45f, 0.5f, 0.5f);
+                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+                RenderSettings.ambientSkyColor = new Color(0.62f, 0.70f, 0.80f);
+                RenderSettings.ambientEquatorColor = new Color(0.50f, 0.54f, 0.48f);
+                RenderSettings.ambientGroundColor = new Color(0.28f, 0.29f, 0.25f);
             }
+            RenderSettings.ambientIntensity = 1.0f;
+            DynamicGI.UpdateEnvironment();
 
-            if (FindFirstObjectByType<Light>() != null) return;
-            var go = new GameObject("Sun");
-            var l = go.AddComponent<Light>();
-            l.type = LightType.Directional;
-            l.intensity = 1.1f;
-            l.transform.rotation = Quaternion.Euler(55f, -30f, 0f);
+            // --- Distance haze: the reference's depth cue. URP honours legacy RenderSettings fog. ---
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.ExponentialSquared;
+            RenderSettings.fogColor = new Color(0.75f, 0.81f, 0.84f);
+            RenderSettings.fogDensity = 0.0011f;
         }
 
         private void BuildGround()
@@ -970,6 +1000,7 @@ namespace Greenkeeper.Unity.Play
             camGo.transform.localPosition = new Vector3(0f, 1.6f, 0f);
             camGo.transform.localRotation = Quaternion.identity;
             cam.farClipPlane = 2500f; // see across the full-scale course
+            cam.clearFlags = CameraClearFlags.Skybox; // show the sky + let fog blend the horizon
 
             _fp = player.AddComponent<FirstPersonController>(); // Awake finds the child camera
 
