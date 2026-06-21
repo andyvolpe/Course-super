@@ -229,24 +229,26 @@ namespace Greenkeeper.Unity.Play
                 }
             data.SetHeights(0, 0, heights);
 
-            // Splat layers: rough grass (base), fairway grass (patches), dirt (rare) — blended by noise.
+            // Splat layers: the terrain reads as ONE continuous rough. A second near-rough tone gives
+            // gentle, low-contrast tonal variation (not fairway-bright patches); dirt is essentially off.
             data.terrainLayers = new[]
             {
                 Layer("Rough", new Color(0.20f, 0.31f, 0.13f), 9f),
-                Layer("Fairway", new Color(0.24f, 0.44f, 0.18f), 7f),
-                Layer("Ground", new Color(0.33f, 0.27f, 0.16f), 6f),
+                Layer("Fairway", new Color(0.23f, 0.35f, 0.15f), 8f),  // only slightly lighter than rough
+                Layer("Ground", new Color(0.30f, 0.27f, 0.17f), 6f),
             };
-            int ar = 512; data.alphamapResolution = ar; // finer + gentler blends -> soft transitions
+            int ar = 512; data.alphamapResolution = ar;
             var alpha = new float[ar, ar, 3];
             for (int y = 0; y < ar; y++)
                 for (int x = 0; x < ar; x++)
                 {
                     float wx = minX + width * x / (ar - 1);
                     float wz = minZ + length * y / (ar - 1);
-                    // Broad, gradual patches (low sharpening = wide feathered transitions); dirt rare.
-                    float fair = Mathf.SmoothStep(0f, 1f, (Mathf.PerlinNoise(wx * 0.018f + 4f, wz * 0.018f + 9f) - 0.5f) * 2.2f);
-                    float dirt = Mathf.SmoothStep(0f, 1f, (Mathf.PerlinNoise(wx * 0.05f + 40f, wz * 0.05f + 70f) - 0.80f) * 3.0f);
-                    float rough = 0.9f;
+                    // Rough dominates everywhere; a subtle lighter mottle and a very rare worn spot avoid
+                    // the blotchy "fairway patches in the rough" look from before.
+                    float fair = Mathf.Clamp01((Mathf.PerlinNoise(wx * 0.015f + 4f, wz * 0.015f + 9f) - 0.45f) * 1.6f) * 0.30f;
+                    float dirt = Mathf.Clamp01((Mathf.PerlinNoise(wx * 0.05f + 40f, wz * 0.05f + 70f) - 0.88f) * 4.0f) * 0.18f;
+                    float rough = 1.0f;
                     float sum = rough + fair + dirt;
                     alpha[y, x, 0] = rough / sum;
                     alpha[y, x, 1] = fair / sum;
@@ -558,9 +560,12 @@ namespace Greenkeeper.Unity.Play
                 roughHalf[i] = w + 14f;
             }
 
-            // Rough corridor then fairway on top — both draped onto the rolling terrain. Tiny lifts so
-            // each surface layers cleanly on the one beneath without floating above the ground.
-            BuildMesh(T, $"rough-{h}", "Rough", ProcMesh.Ribbon(center, roughHalf, 5f), 0.0f, new Color(0.20f, 0.32f, 0.13f));
+            // The TERRAIN itself is the rough (uniform grass + scattered tufts), so we don't draw a second
+            // opaque rough mesh on top of it (that read as a dark patchwork). We still build the rough
+            // surface as a COLLIDER-ONLY object so the ball/lie system can tell you're in the rough.
+            var roughGo = BuildMesh(T, $"rough-{h}", "Rough", ProcMesh.Ribbon(center, roughHalf, 5f), 0.0f, new Color(0.20f, 0.32f, 0.13f));
+            var roughMr = roughGo.GetComponent<MeshRenderer>();
+            if (roughMr != null) roughMr.enabled = false; // collider + SurfaceRenderer stay; terrain shows through
             if (_game.Course.Get($"fairway-{h}") != null)
                 BuildMesh(T, $"fairway-{h}", "Fairway", ProcMesh.Ribbon(center, fairHalf, 5f), 0.02f, new Color(0.22f, 0.44f, 0.18f));
 

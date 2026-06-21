@@ -76,19 +76,25 @@ namespace Greenkeeper.Unity.Play
                     }
                 }
                 TellAppearance t = obs.Tells.Length > 0 ? obs.Tells[idx] : default;
+                // Greens carry the full tell fidelity; the maintained off-green surfaces (fairway/tee/
+                // approach) are naturally a touch thinner/longer than a green, so we read their distress
+                // MUCH more gently — otherwise normal turf rendered as dark/brown "diseased" patches.
+                bool green = zone.Type == ZoneType.Green;
+                float thinW = green ? 0.7f : 0.30f;
+                float overW = green ? 0.55f : 0.40f;
+
                 c = new Color((float)t.BaseColor.R, (float)t.BaseColor.G, (float)t.BaseColor.B, 1f);
                 c = Color.Lerp(c, new Color(0.55f, 0.60f, 0.58f), (float)t.WiltTint * 0.6f);   // dry wilt
-                c = Color.Lerp(c, c * 0.6f, (float)t.WetSheen);                                 // wet sheen
+                c = Color.Lerp(c, c * 0.7f, (float)t.WetSheen);                                 // wet sheen
                 c = Color.Lerp(c, new Color(0.72f, 0.64f, 0.40f), (float)t.Lesions * 0.85f);    // disease straw
-                c = Color.Lerp(c, new Color(0.34f, 0.26f, 0.18f), (float)t.Thinning * 0.7f);    // bare soil
+                c = Color.Lerp(c, new Color(0.34f, 0.26f, 0.18f), (float)t.Thinning * thinW);   // bare soil
 
-                // Un-mown LENGTH reads visibly shaggier: a longer canopy self-shadows into a deeper,
-                // more olive green (rough swallows the ball; fairways/greens just look unkempt).
+                // Un-mown LENGTH reads shaggier: a longer canopy deepens to a softer olive (not near-black).
                 double cut = zone.Surface != null ? zone.Surface.MowHeightIn : zone.MowHeightIn;
                 double range = zone.Type == ZoneType.Rough ? 4.0 : 1.5;
                 float over = Mathf.Clamp01((float)((zone.GrassHeightIn - cut) / range));
                 if (over > 0.01f)
-                    c = Color.Lerp(c, new Color(0.27f, 0.36f, 0.18f), over * 0.6f);
+                    c = Color.Lerp(c, new Color(0.30f, 0.40f, 0.20f), over * overW);
             }
 
             _r.GetPropertyBlock(_mpb);
