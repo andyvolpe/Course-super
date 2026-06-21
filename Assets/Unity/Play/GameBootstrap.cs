@@ -32,6 +32,9 @@ namespace Greenkeeper.Unity.Play
         private bool _planMode = true; // start in Plan mode so the HUD is usable immediately
         private string _error;
 
+        /// <summary>True when the cursor is free for planning (vs Course mode walking/putting).</summary>
+        public bool PlanMode => _planMode;
+
         /// <summary>
         /// Auto-boot: when you enter Play mode in ANY scene, if there's no GameBootstrap already, spawn
         /// one. This means you can just press Play on an empty/default scene with zero setup — no
@@ -202,25 +205,11 @@ namespace Greenkeeper.Unity.Play
         private void BuildHuds(GameObject player)
         {
             var ui = new GameObject("HUD");
-
-            var debug = ui.AddComponent<GreenDebugPanel>();
-            debug.game = _game; debug.enabled = false; // behind the window-HUD toggle
-
-            var window = ui.AddComponent<MaintenanceWindowHud>();
-            window.game = _game; window.debugPanel = debug;
-
-            var forecast = ui.AddComponent<ForecastHud>();
-            forecast.game = _game;
-
-            var legibility = ui.AddComponent<LegibilityHud>();
-            legibility.game = _game;
-            legibility.inspection = _inspect;
-
-            var economy = ui.AddComponent<EconomyHud>();
-            economy.game = _game;
-
-            var tournament = ui.AddComponent<TournamentHud>();
-            tournament.game = _game;
+            var hud = ui.AddComponent<GreenkeeperHud>();
+            hud.game = _game;
+            hud.inspection = _inspect;
+            hud.putt = _putt;
+            hud.bootstrap = this;
         }
 
         // ---- modes / input ----
@@ -252,16 +241,8 @@ namespace Greenkeeper.Unity.Play
                 return;
             }
             if (_game == null)
-            {
                 GUI.Label(new Rect(12, 40, 600, 40), "GameBootstrap: scene not built (check the Console).");
-                return;
-            }
-            GUI.Label(new Rect(Screen.width / 2 - 220, 6, 460, 22),
-                _planMode ? "PLAN mode — click the morning window. TAB to walk the course."
-                          : "COURSE mode — WASD walk, mouse look. LMB putt / RMB approach, E meter, Q scout. TAB to plan.");
-            // crosshair in course mode
-            if (!_planMode)
-                GUI.Label(new Rect(Screen.width / 2 - 4, Screen.height / 2 - 8, 12, 16), "+");
+            // The unified GreenkeeperHud draws the rest (top bar, panels, crosshair, putt meter).
         }
 
         private static void ScaleGuiFonts()

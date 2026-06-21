@@ -127,14 +127,8 @@ namespace Greenkeeper.Unity.Play
 
         public void NextHole() { Strokes = 0; Holed = false; }
 
-        private void OnGUI()
-        {
-            if (ball == null) return;
-            GUILayout.BeginArea(new Rect(Screen.width / 2 - 90, Screen.height - 70, 180, 60), GUI.skin.box);
-            GUILayout.Label($"Strokes: {Strokes}{(Holed ? "  — HOLED!" : "")}");
-            GUILayout.HorizontalSlider(Power, 0f, 1f);
-            GUILayout.Label(_charging ? (_approachMode ? "approach… release to strike" : "putt… release to strike") : "hold LMB putt / RMB approach");
-            GUILayout.EndArea();
-        }
+        // Exposed for the unified HUD to render the meter (no separate OnGUI panel).
+        public bool Charging => _charging;
+        public bool ApproachMode => _approachMode;
     }
 }
