@@ -32,6 +32,9 @@ namespace Greenkeeper.Sim.Systems
                 var cells = new SubCell[cellCount];
                 for (int i = 0; i < cellCount; i++) cells[i] = new SubCell();
 
+                // Each surface is initialised to ITS profile's healthy ranges (the §5 per-surface table).
+                var profile = SurfaceProfile.For(spec.Type);
+
                 var z = new ZoneState
                 {
                     Id = spec.Id,
@@ -40,12 +43,13 @@ namespace Greenkeeper.Sim.Systems
                     HoleNumber = spec.HoleNumber,
                     GridSize = spec.GridSize,
                     Cells = cells,
+                    Surface = profile,
 
-                    SoilMoisturePct = rng.Range(HealthyMoistureMin, HealthyMoistureMax),
-                    RootDepthIn = HealthyRootDepthIn,
-                    DensityPct = rng.Range(HealthyDensityMin, HealthyDensityMax),
-                    OrganicMatterPct = rng.Range(HealthyOmMin, HealthyOmMax),
-                    TurfDebtPct = rng.Range(HealthyDebtMin, HealthyDebtMax),
+                    SoilMoisturePct = rng.Range(profile.MoistureMin, profile.MoistureMax),
+                    RootDepthIn = profile.RootDepthIn,
+                    DensityPct = rng.Range(profile.DensityMin, profile.DensityMax),
+                    OrganicMatterPct = rng.Range(profile.OmMin, profile.OmMax),
+                    TurfDebtPct = rng.Range(profile.DebtMin, profile.DebtMax),
                     CarbReservesPct = t.CarbStartPct,
                     NitrogenPct = t.NitrogenStart,
                     PotassiumPct = t.PotassiumStart,
@@ -53,20 +57,24 @@ namespace Greenkeeper.Sim.Systems
                     SoilTempF = 58.0,
                     GddAccum = 0.0,
                     GrainPct = t.GrainStartPct,
-                    MowHeightIn = DefaultMowHeight(spec.Type),
+                    MowHeightIn = profile.MowHeightIn,
                     SprayResidualDaysLeft = 0,
                     DaysSinceAeration = 0,
                     AerationRecoveryDaysLeft = 0,
                     RollBonus = 0.0,
                 };
 
-                // Bunkers are sand: they don't carry living-turf agronomy.
-                if (spec.Type == ZoneType.Bunker)
+                // Bunkers are sand: no living-turf agronomy, but they DO carry a sand-consistency state.
+                if (!profile.IsTurf)
                 {
                     z.DensityPct = 0;
                     z.OrganicMatterPct = 0;
                     z.GrainPct = 0;
                     z.CarbReservesPct = 0;
+                    z.NitrogenPct = 0;
+                    z.PotassiumPct = 0;
+                    z.RootDepthIn = 0;
+                    z.SandQualityPct = profile.SandQualityStart;
                 }
 
                 // Seed sensible derived surfaces so day-0 reads are meaningful.
@@ -75,18 +83,6 @@ namespace Greenkeeper.Sim.Systems
             }
 
             return course;
-        }
-
-        private static double DefaultMowHeight(ZoneType type)
-        {
-            switch (type)
-            {
-                case ZoneType.Green: return 0.125;
-                case ZoneType.Tee: return 0.40;
-                case ZoneType.Fairway: return 0.50;
-                case ZoneType.Rough: return 2.5;
-                default: return 0.0;
-            }
         }
     }
 }

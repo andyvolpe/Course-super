@@ -25,6 +25,8 @@ namespace Greenkeeper.Sim.Crew
                 case TaskType.FertilizeProgram: return 0.4;  // per zone (a foliar spray is a touch lighter, set per helper)
                 case TaskType.Aerate:           return 1.5;  // per zone (heavy)
                 case TaskType.MowFairways:      return 0.8;  // per fairway
+                case TaskType.MowRough:         return 0.7;  // per rough block
+                case TaskType.MowTees:          return 0.3;  // per tee
                 case TaskType.RakeBunkers:      return 4.0;  // all bunkers
                 case TaskType.ChangeCups:       return 1.5;  // all greens
                 default:                        return 0.5;
@@ -53,6 +55,12 @@ namespace Greenkeeper.Sim.Crew
         public static TaskOrder Iron(string zoneId) => Program(zoneId, FertApplication.IronOnly(IronFe), 0.3);
         public static TaskOrder Aerate(string zoneId) => new TaskOrder(TaskType.Aerate, zoneId, BaseHours(TaskType.Aerate));
         public static TaskOrder MowFairway(string fairwayId) => new TaskOrder(TaskType.MowFairways, fairwayId, BaseHours(TaskType.MowFairways));
+        public static TaskOrder MowRoughZone(string roughId) => new TaskOrder(TaskType.MowRough, roughId, BaseHours(TaskType.MowRough));
+        public static TaskOrder MowTeeZone(string teeId) => new TaskOrder(TaskType.MowTees, teeId, BaseHours(TaskType.MowTees));
+        // Course-wide gang passes (one job spanning every zone of that surface).
+        public static TaskOrder MowFairwaysAll() => new TaskOrder(TaskType.MowFairways, null, 6.0);
+        public static TaskOrder MowRoughAll() => new TaskOrder(TaskType.MowRough, null, 5.0);
+        public static TaskOrder MowTeesAll() => new TaskOrder(TaskType.MowTees, null, 2.0);
         public static TaskOrder RakeBunkers() => new TaskOrder(TaskType.RakeBunkers, null, BaseHours(TaskType.RakeBunkers));
         public static TaskOrder ChangeCups() => new TaskOrder(TaskType.ChangeCups, null, BaseHours(TaskType.ChangeCups));
 
@@ -83,6 +91,10 @@ namespace Greenkeeper.Sim.Crew
                     a.Aerate = true; break;
                 case TaskType.MowFairways:
                     a.Mow = true; a.MowHeightIn = 0.5; break;
+                case TaskType.MowRough:
+                    a.Mow = true; a.MowHeightIn = 2.5; break;  // keep the rough at its miss-penalty height
+                case TaskType.MowTees:
+                    a.Mow = true; a.MowHeightIn = 0.4; break;
                 case TaskType.RakeBunkers:
                     a.Rake = true; break; // clears storm washout
                 case TaskType.ChangeCups:

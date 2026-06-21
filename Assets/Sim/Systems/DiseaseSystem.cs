@@ -39,8 +39,10 @@ namespace Greenkeeper.Sim.Systems
                 t.DiseaseNitrogenBase + (1.0 - z.NitrogenPct / t.NitrogenOptimum),
                 0.0, t.DiseaseNitrogenMax);
 
+            // Per-surface susceptibility instances the ONE disease model (green = 1.0, rough lowest).
+            double surfaceSusc = z.Surface != null ? z.Surface.DiseaseSusceptibility : 1.0;
             double dollarSpot = Mathx.Max0(tempFactor) * Mathx.Max0(wetnessFactor)
-                                * nitrogenFactor * ctx.Grass.DiseaseSusceptibility;
+                                * nitrogenFactor * ctx.Grass.DiseaseSusceptibility * surfaceSusc;
 
             // HIGH N is the OTHER end of the fork: brown patch (warm) and Pythium (hot, near-saturated).
             // Both ride on overN and are RESISTED by potassium. overN = 0 in-band, so these vanish and
@@ -50,11 +52,11 @@ namespace Greenkeeper.Sim.Systems
             double kResistance = 1.0 - t.KDiseaseResistanceMax * Mathx.Clamp01(z.PotassiumPct / t.PotassiumOptimum);
 
             double brownPatch = Mathx.Max0(Mathx.Bell(w.TmeanF, t.BrownPatchTempCenterF, t.BrownPatchTempHalfWidthF))
-                                * Mathx.Max0(wetnessFactor) * highNFactor * kResistance * ctx.Grass.DiseaseSusceptibility;
+                                * Mathx.Max0(wetnessFactor) * highNFactor * kResistance * ctx.Grass.DiseaseSusceptibility * surfaceSusc;
 
             double pythiumWet = Mathx.Max0(wetnessFactor - t.PythiumWetnessMin) / Mathx.Max0(1.0 - t.PythiumWetnessMin);
             double pythium = Mathx.Max0(Mathx.Bell(w.TmeanF, t.PythiumTempCenterF, t.PythiumTempHalfWidthF))
-                             * Mathx.Clamp01(pythiumWet) * highNFactor * kResistance * ctx.Grass.DiseaseSusceptibility;
+                             * Mathx.Clamp01(pythiumWet) * highNFactor * kResistance * ctx.Grass.DiseaseSusceptibility * surfaceSusc;
 
             double highN = System.Math.Max(brownPatch, pythium);
             ctx.Result.HighNDiseaseFavorability[z.Id] = highN;

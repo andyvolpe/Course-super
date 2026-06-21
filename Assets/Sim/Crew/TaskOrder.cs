@@ -14,7 +14,9 @@ namespace Greenkeeper.Sim.Crew
         Fertilize,       // per zone, nitrogen (legacy simple feed)
         FertilizeProgram,// per zone, the full fertility PROGRAM (source/method/N:K/Fe)
         Aerate,          // per zone, relieves OM/debt
-        MowFairways,     // per fairway
+        MowFairways,     // fairways (per zone or course-wide)
+        MowRough,        // rough (per zone or course-wide) — keeps the miss-penalty in check
+        MowTees,         // tees (per zone or course-wide) — divot/wear cycle
         RakeBunkers,     // course-wide
         ChangeCups       // course-wide, cosmetic/wear (no agronomy delta)
     }

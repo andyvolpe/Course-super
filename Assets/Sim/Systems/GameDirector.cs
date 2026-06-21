@@ -118,6 +118,7 @@ namespace Greenkeeper.Sim.Systems
                 OrganicMatter.Apply(z, _tuning, _grass);                             // 6 OM + grain
                 DiseaseSystem.Apply(z, action, ctx, zoneRng);                        // 7 disease
                 MaintenanceSystem.ApplyMechanical(z, action, _tuning);              // 8 maintenance
+                MaintenanceSystem.ApplyBunkerSand(z, action, result.Weather, _tuning); // 8b bunker sand (non-turf)
                 TurfDebtSystem.Apply(z, action, ctx);                               // 9 turf debt
 
                 // Frost-mowing damage (applied before derived surfaces so speed/firmness reflect it).

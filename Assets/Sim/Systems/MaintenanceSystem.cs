@@ -36,7 +36,7 @@ namespace Greenkeeper.Sim.Systems
             if (z.Type == ZoneType.Bunker)
             {
                 if (action.Rake) z.WashedOut = false; // raking restores a washed-out bunker
-                return;
+                return; // sand consistency is handled in ApplyBunkerSand (it needs the weather)
             }
             double q = action.EffectiveQuality;
 
@@ -71,6 +71,24 @@ namespace Greenkeeper.Sim.Systems
                 z.DensityPct = Mathx.Max0(z.DensityPct - t.AerateDensityWear); // coring wear unscaled
                 z.DaysSinceAeration = 0;
                 z.AerationRecoveryDaysLeft = t.AerateRecoveryDays;
+            }
+        }
+
+        /// <summary>
+        /// Bunker sand consistency (non-turf §5): settles/scuffs daily and washes out in rain; a rake
+        /// restores it. Drives clean-vs-buried lies (BallPhysics) and the bunker's condition score.
+        /// </summary>
+        public static void ApplyBunkerSand(ZoneState z, ZoneAction action, WeatherDay w, AgronomyTuning t)
+        {
+            if (z.Type != ZoneType.Bunker) return;
+            if (action.Rake)
+            {
+                z.SandQualityPct = Mathx.Clamp(z.SandQualityPct + t.SandRakeRestore, 0.0, 100.0);
+            }
+            else
+            {
+                double loss = t.SandDailySettle + w.RainMm * t.SandWashoutPerRainMm;
+                z.SandQualityPct = Mathx.Clamp(z.SandQualityPct - loss, 0.0, 100.0);
             }
         }
 

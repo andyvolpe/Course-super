@@ -17,8 +17,8 @@ namespace Greenkeeper.Sim.Config
 
         /// <summary>
         /// Builds the canonical MVP course layout from the §5 tuning table: 18 greens (3x3 sub-cell
-        /// USGA-spec), 18 tees, 18 fairways, rough blocks, and 40 bunkers. Initial *state* values
-        /// (healthy start) are applied by CourseFactory, not here.
+        /// USGA-spec), 18 approaches, 18 tees, 18 fairways, 18 rough blocks, and 40 bunkers. Initial
+        /// *state* values (per-surface healthy start) are applied by CourseFactory, not here.
         /// </summary>
         public static CourseConfig Mvp()
         {
@@ -27,6 +27,7 @@ namespace Greenkeeper.Sim.Config
             for (int hole = 1; hole <= cfg.Holes; hole++)
             {
                 cfg.Zones.Add(new ZoneSpec($"green-{hole:00}", ZoneType.Green, SoilType.UsgaSpec, hole, 3));
+                cfg.Zones.Add(new ZoneSpec($"approach-{hole:00}", ZoneType.Approach, SoilType.UsgaSpec, hole, 1));
                 cfg.Zones.Add(new ZoneSpec($"tee-{hole:00}", ZoneType.Tee, SoilType.PushUp, hole, 1));
                 cfg.Zones.Add(new ZoneSpec($"fairway-{hole:00}", ZoneType.Fairway, SoilType.PushUp, hole, 1));
                 cfg.Zones.Add(new ZoneSpec($"rough-{hole:00}", ZoneType.Rough, SoilType.PushUp, hole, 1));

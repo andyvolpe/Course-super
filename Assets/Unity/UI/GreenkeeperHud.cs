@@ -125,8 +125,12 @@ namespace Greenkeeper.Unity.UI
                 ("Granular slow", () => ForEachGreen(g => TaskCatalog.FeedGranularSlow(g.Id))));
             Row(("Granular QUICK", () => ForEachGreen(g => TaskCatalog.FeedGranularQuick(g.Id))),
                 ("Iron — colour", () => ForEachGreen(g => TaskCatalog.Iron(g.Id))));
+            GUILayout.Label("Surfaces (whole course — competes for the same hours)", T.Dim);
+            Row(("Mow fairways", () => AddTask(TaskCatalog.MowFairwaysAll())),
+                ("Mow rough", () => AddTask(TaskCatalog.MowRoughAll())),
+                ("Mow tees", () => AddTask(TaskCatalog.MowTeesAll())));
             Row(("Rake bunkers", () => AddTask(TaskCatalog.RakeBunkers())),
-                ("Triplex", () => AddTask(TaskCatalog.Triplex())),
+                ("Triplex greens", () => AddTask(TaskCatalog.Triplex())),
                 ("Clear", () => game.BeginWindow()));
 
             GUILayout.Space(6);

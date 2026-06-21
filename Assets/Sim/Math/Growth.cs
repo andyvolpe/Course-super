@@ -18,11 +18,15 @@ namespace Greenkeeper.Sim.Math
             double fc = t.FieldCapacity(z.Soil, z.OrganicMatterPct);
             double wilt = t.WiltPoint(z.Soil);
 
+            // Per-surface recuperation (green = 1.0, rough slower) instances the ONE growth model.
+            double surfaceRecup = z.Surface != null ? z.Surface.GrowthRecuperation : 1.0;
+            double trafficWear = z.Surface != null ? z.Surface.TrafficWearPerDay : 0.0;
+
             double tempFactor = Mathx.Bell(w.TmeanF, t.GrowthTempCenterF, t.GrowthTempHalfWidthF);
             double moistureFactor = Mathx.InverseLerp(wilt, fc, z.SoilMoisturePct);
             double nFactor = Mathx.Clamp01(z.NitrogenPct / t.NitrogenOptimum);
 
-            double potential = gddToday * t.GrowthPerGdd * grass.RecuperativeRate;
+            double potential = gddToday * t.GrowthPerGdd * grass.RecuperativeRate * surfaceRecup;
             double growth = Mathx.Max0(potential * tempFactor * moistureFactor * nFactor);
 
             // Clip yield scales with how much canopy there is to cut.
@@ -35,9 +39,10 @@ namespace Greenkeeper.Sim.Math
             z.CarbReservesPct = Mathx.Clamp(
                 z.CarbReservesPct + photo - respiration - growth * t.CarbCostPerGrowth, 0.0, 100.0);
 
-            // Density: growth recovers it; baseline wear erodes it (disease/debt subtract elsewhere).
-            double densGain = growth * t.DensityGainPerGrowth * grass.RecuperativeRate;
-            z.DensityPct = Mathx.Clamp(z.DensityPct + densGain - t.DensityNaturalWear, 0.0, 100.0);
+            // Density: growth recovers it; baseline + per-surface TRAFFIC wear erode it (tees/divots
+            // highest, rough lowest). Disease/debt subtract elsewhere.
+            double densGain = growth * t.DensityGainPerGrowth * grass.RecuperativeRate * surfaceRecup;
+            z.DensityPct = Mathx.Clamp(z.DensityPct + densGain - t.DensityNaturalWear - trafficWear, 0.0, 100.0);
 
             // Nitrogen: uptake by growth + leaching with drainage. Potassium is consumed by growth too
             // (so a push that isn't matched by K feeding drifts toward the fragile high-N/low-K state).

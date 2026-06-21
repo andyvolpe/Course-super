@@ -42,6 +42,17 @@ namespace Greenkeeper.Sim.Physics
         public double TotalFt;
     }
 
+    /// <summary>The lie a shot finds on a surface (TDD §7): the miss is penalised by the surface YOU keep.</summary>
+    public struct LieResult
+    {
+        public ZoneType Surface;
+        public double DistanceFactor;  // multiplier on the next shot's distance (1 = clean strike)
+        public double RollOutFt;       // run-out after landing (firm fairway runs, soft holds)
+        public bool Flier;             // grass between club and ball — unpredictable jumper
+        public bool Buried;            // ball sat down — a recovery, big distance loss
+        public string Quality;         // short human-readable label
+    }
+
     /// <summary>
     /// The ball reads the course (TDD §7). All putt/approach behaviour is a deterministic function of
     /// the green's MAINTAINED state — Stimp sets roll distance, firmness sets release, the mesh slope
@@ -50,6 +61,52 @@ namespace Greenkeeper.Sim.Physics
     /// </summary>
     public static class BallPhysics
     {
+        /// <summary>
+        /// Resolve the lie on whatever surface the ball came to rest on. Fairway FIRMNESS sets run-out,
+        /// rough DENSITY sets the flier/buried penalty, and bunker SAND CONSISTENCY sets clean-vs-buried —
+        /// every input is something the superintendent maintains.
+        /// </summary>
+        public static LieResult SolveLie(ZoneState surface, AgronomyTuning t)
+        {
+            t = t ?? AgronomyTuning.Default;
+            var r = new LieResult { Surface = surface.Type, DistanceFactor = 1.0, Quality = "clean" };
+
+            switch (surface.Type)
+            {
+                case ZoneType.Fairway:
+                case ZoneType.Approach:
+                case ZoneType.Tee:
+                {
+                    double firmNorm = Mathx.Clamp01(surface.FirmnessPct / 100.0);
+                    r.RollOutFt = firmNorm * t.FairwayRollOutMaxFt;  // firm runs out, soft holds
+                    r.Quality = firmNorm > 0.6 ? "clean, firm (runs out)" : "clean, receptive";
+                    break;
+                }
+                case ZoneType.Rough:
+                {
+                    double densNorm = Mathx.Clamp01(surface.DensityPct / 100.0); // denser/taller = worse lie
+                    r.DistanceFactor = Mathx.Clamp(1.0 - t.RoughDistancePenalty * densNorm, 0.0, 1.0);
+                    r.Buried = densNorm >= t.RoughBuriedDensity;
+                    r.Flier = !r.Buried && densNorm >= t.RoughFlierDensityMin;
+                    r.Quality = r.Buried ? "buried in rough" : (r.Flier ? "flier lie" : "light rough");
+                    break;
+                }
+                case ZoneType.Bunker:
+                {
+                    double q = Mathx.Clamp01(surface.SandQualityPct / 100.0);
+                    if (surface.WashedOut) q *= 0.5;
+                    r.DistanceFactor = Mathx.Clamp01(t.BunkerCleanDistanceBase + t.BunkerCleanDistanceSpan * q);
+                    r.Buried = surface.WashedOut || q < t.BunkerBuriedQuality;
+                    r.Quality = r.Buried ? "plugged/poor sand" : "clean sand";
+                    break;
+                }
+                default: // Green — putting surface; a clean lie by definition
+                    r.Quality = "on the green";
+                    break;
+            }
+            return r;
+        }
+
         public static PuttResult SolvePutt(ZoneState green, PuttInput input, AgronomyTuning t)
         {
             t = t ?? AgronomyTuning.Default;

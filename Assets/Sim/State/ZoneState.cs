@@ -16,6 +16,10 @@ namespace Greenkeeper.Sim.State
         public SoilType Soil;
         public int HoleNumber;
 
+        /// <summary>The surface's tuning/profile (per-SurfaceType agronomy). Set by CourseFactory; the
+        /// reference is shared (immutable config) so Clone/determinism are unaffected.</summary>
+        public SurfaceProfile Surface;
+
         // Spatial disease grid (length = GridSize*GridSize; 9 for greens, 1 otherwise)
         public int GridSize = 1;
         public SubCell[] Cells = System.Array.Empty<SubCell>();
@@ -40,6 +44,9 @@ namespace Greenkeeper.Sim.State
         // ---- Derived playing surface (§4.4) ----
         public double FirmnessPct;       // 0..100
         public double Stimp;             // green speed, feet (clamped 6..15)
+
+        // ---- Bunker (non-turf) ----
+        public double SandQualityPct;    // sand consistency 0..100 — clean firm vs settled/washed (lie quality)
 
         // ---- Maintenance bookkeeping ----
         public double MowHeightIn = 0.125; // current height of cut
@@ -97,6 +104,7 @@ namespace Greenkeeper.Sim.State
             into.Add(ClipVolume);
             into.Add(FirmnessPct);
             into.Add(Stimp);
+            into.Add(SandQualityPct);
             into.Add(MowHeightIn);
             into.Add(SprayResidualDaysLeft);
             into.Add(DaysSinceAeration);

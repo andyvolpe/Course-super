@@ -43,6 +43,7 @@ namespace Greenkeeper.Sim.Config
         public double MmToVwcPct = 0.5;
         // Crop coefficient by zone (greens mown tight transpire less than lush rough).
         public double KcGreen = 1.0;
+        public double KcApproach = 0.95;
         public double KcTee = 1.0;
         public double KcFairway = 0.9;
         public double KcRough = 1.1;
@@ -261,9 +262,20 @@ namespace Greenkeeper.Sim.Config
         public double ApproachReleaseFirmFactorFt = 18.0; // extra release at full firmness
         public double ApproachBounceMaxFt = 1.2;          // first-bounce height at full firmness
 
-        // Off-green penalties (hooks for later): rough thins distance, bunkers kill it.
-        public double RoughDistancePenalty = 0.5;
-        public double BunkerDistancePenalty = 0.85;
+        // ---- Bunker (non-turf) sand dynamics (§5) — feeds rake/edge tasks + clean-vs-buried lies ----
+        public double SandDailySettle = 1.2;        // sand settles/scuffs a little each day (footprints)
+        public double SandWashoutPerRainMm = 2.0;   // rain washes the faces (consistency drops)
+        public double SandRakeRestore = 60.0;       // a rake restores this much consistency
+        public double BunkerWashoutRainMm = 18.0;   // a storm this big washes the bunker out (needs raking)
+
+        // ---- Surface → LIE model (TDD §7): the miss is penalised by the surface YOU maintain ----
+        public double FairwayRollOutMaxFt = 32.0;   // a firm fairway runs the ball out this far
+        public double RoughDistancePenalty = 0.55;  // fraction of distance the rough eats at full density
+        public double RoughFlierDensityMin = 0.55;  // above this rough density a flier is possible
+        public double RoughBuriedDensity = 0.80;    // above this the ball sits down (buried lie)
+        public double BunkerCleanDistanceBase = 0.30; // distance factor floor from a poor/washed bunker
+        public double BunkerCleanDistanceSpan = 0.55; // extra distance factor from clean firm sand
+        public double BunkerBuriedQuality = 0.40;   // below this sand quality (or washed) = a buried lie
 
         public double FieldCapacity(SoilType soil, double organicMatterPct)
         {
@@ -280,6 +292,7 @@ namespace Greenkeeper.Sim.Config
             switch (zone)
             {
                 case ZoneType.Green: return KcGreen;
+                case ZoneType.Approach: return KcApproach;
                 case ZoneType.Tee: return KcTee;
                 case ZoneType.Fairway: return KcFairway;
                 case ZoneType.Rough: return KcRough;

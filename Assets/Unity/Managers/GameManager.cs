@@ -149,7 +149,22 @@ namespace Greenkeeper.Unity.Managers
                 {
                     var spray = TaskCatalog.Spray(z.Id); spray.Delegated = true; spray.AssignedCrewId = Crew[1 % Crew.Count].Id; w.TryAssign(spray);
                 }
+
+            // Whole-course surfaces on a rotation (delegated). They COMPETE for the same crew-hours —
+            // over-budget gang passes are simply rejected, which is the cross-surface triage.
+            int day = Director.Clock.DayIndex;
+            if (!frost && day % 2 == 0) Delegate(w, TaskCatalog.MowFairwaysAll(), 2);
+            if (!frost && day % 3 == 0) Delegate(w, TaskCatalog.MowTeesAll(), 3);
+            if (!frost && day % 4 == 0) Delegate(w, TaskCatalog.MowRoughAll(), 4);
+            if (day % 5 == 0) Delegate(w, TaskCatalog.RakeBunkers(), 2);
             return w.ToDayPlan(Course, Delegation.Resolver(Crew));
+        }
+
+        private void Delegate(MaintenanceWindow w, Greenkeeper.Sim.Crew.TaskOrder task, int crewIndex)
+        {
+            task.Delegated = true;
+            if (Crew.Count > 0) task.AssignedCrewId = Crew[crewIndex % Crew.Count].Id;
+            w.TryAssign(task);
         }
 
         public void SaveGame()

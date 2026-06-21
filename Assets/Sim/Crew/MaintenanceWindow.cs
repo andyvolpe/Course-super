@@ -89,6 +89,10 @@ namespace Greenkeeper.Sim.Crew
                     filter = ZoneType.Green; break;
                 case TaskType.MowFairways:
                     filter = ZoneType.Fairway; break;
+                case TaskType.MowRough:
+                    filter = ZoneType.Rough; break;
+                case TaskType.MowTees:
+                    filter = ZoneType.Tee; break;
                 case TaskType.RakeBunkers:
                     filter = ZoneType.Bunker; break;
             }

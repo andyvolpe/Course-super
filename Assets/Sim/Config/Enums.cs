@@ -4,6 +4,7 @@ namespace Greenkeeper.Sim.Config
     public enum ZoneType
     {
         Green,
+        Approach,   // the short-mown collar/run-up in front of a green (transition height)
         Tee,
         Fairway,
         Rough,
