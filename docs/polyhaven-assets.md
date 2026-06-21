@@ -28,6 +28,11 @@ Put each asset at `Assets/Resources/PolyHaven/<Name>` (the `Resources` folder is
 Surfaces are still **tinted by turf health** at runtime (the legibility tells multiply the texture),
 and texture tiling is auto-set (~1 repeat / 2 m), so a grass material reads as colour-graded turf.
 
+**Inheritance:** related surfaces borrow a texture when they don't have their own, so you don't have
+to import the same grass five times. A single **Fairway** import also dresses **Tee**, **Approach**
+and **Green**; **Ground** and **Rough** share. Import a key explicitly to override (e.g. a distinct
+fine **Green** turf). So a minimal set is just **Fairway + Rough + Bunker + Skybox**.
+
 ## Fastest path: the built-in importer
 
 **Window > Greenkeeper > Poly Haven Importer.** Paste a slug (the URL tail from

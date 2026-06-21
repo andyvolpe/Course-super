@@ -392,7 +392,7 @@ namespace Greenkeeper.Unity.Play
         /// <summary>A per-quad material: the textured Poly Haven material if present (tiled to size), else a flat colour.</summary>
         private static Material SurfaceMat(string key, Color fallback, float sizeX, float sizeZ)
         {
-            var loaded = Resources.Load<Material>($"PolyHaven/{key}");
+            var loaded = LoadSurfaceMaterial(key);
             if (loaded == null) return SolidMaterial(fallback);
             var m = new Material(loaded);                 // per-quad instance so tiling can match its size
             const float tileMetres = 2.0f;               // one texture repeat ≈ every 2 m
@@ -400,6 +400,35 @@ namespace Greenkeeper.Unity.Play
             if (m.HasProperty("_BaseMap")) m.SetTextureScale("_BaseMap", scale); // URP lit
             m.mainTextureScale = scale;                  // Built-in / fallback
             return m;
+        }
+
+        /// <summary>
+        /// Load a surface's material, falling back through closely-related surfaces so you don't have to
+        /// import the same grass for every key — e.g. a single "Fairway" import also dresses tees,
+        /// approaches and greens. Import a key explicitly to override the inheritance.
+        /// </summary>
+        private static Material LoadSurfaceMaterial(string key)
+        {
+            foreach (var k in MaterialFallbacks(key))
+            {
+                var m = Resources.Load<Material>($"PolyHaven/{k}");
+                if (m != null) return m;
+            }
+            return null;
+        }
+
+        private static string[] MaterialFallbacks(string key)
+        {
+            switch (key)
+            {
+                case "Tee":      return new[] { "Tee", "Fairway", "Approach" };
+                case "Approach": return new[] { "Approach", "Fairway" };
+                case "Green":    return new[] { "Green", "Approach", "Fairway" };
+                case "Fairway":  return new[] { "Fairway" };
+                case "Rough":    return new[] { "Rough", "Ground" };
+                case "Ground":   return new[] { "Ground", "Rough" };
+                default:         return new[] { key }; // Bunker, etc.
+            }
         }
 
         private static Material SolidMaterial(Color c)
