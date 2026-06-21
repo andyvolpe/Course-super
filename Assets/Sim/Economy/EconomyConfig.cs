@@ -50,6 +50,8 @@ namespace Greenkeeper.Sim.Economy
         // ---- VARIABLE costs (materials/inputs) — only when you actually do the work ----
         public double SprayCost = 40.0;        // per zone sprayed (fungicide)
         public double FertCostPerN = 2.5;      // per unit of nitrogen applied
+        public double FertCostPerK = 1.5;      // per unit of potassium applied
+        public double FertCostPerFe = 0.6;     // per unit of iron — cheap, the safe "make it greener" out
         public double WaterCostPerMm = 1.0;    // per mm irrigation per zone
         public double MowCost = 5.0;           // per zone mown
         public double RollCost = 4.0;          // per zone rolled

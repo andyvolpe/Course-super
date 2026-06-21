@@ -48,6 +48,8 @@ namespace Greenkeeper.Sim.Systems
                     TurfDebtPct = rng.Range(HealthyDebtMin, HealthyDebtMax),
                     CarbReservesPct = t.CarbStartPct,
                     NitrogenPct = t.NitrogenStart,
+                    PotassiumPct = t.PotassiumStart,
+                    IronPct = t.IronStart,
                     SoilTempF = 58.0,
                     GddAccum = 0.0,
                     GrainPct = t.GrainStartPct,

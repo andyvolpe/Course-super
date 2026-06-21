@@ -27,6 +27,10 @@ namespace Greenkeeper.Sim.Systems
         public readonly List<ExpressionEvent> Expressions = new List<ExpressionEvent>();
         public readonly Dictionary<string, bool> TellByZone = new Dictionary<string, bool>();
 
+        /// <summary>Per-zone high-N disease favorability (brown patch / Pythium) for the day — for the
+        /// fertility-program audit/UI. 0 for in-band turf.</summary>
+        public readonly Dictionary<string, double> HighNDiseaseFavorability = new Dictionary<string, double>();
+
         /// <summary>Crises raised this day that must pull the player into the window (Phase 4.4).</summary>
         public readonly List<string> Interrupts = new List<string>();
         public bool IsInterruptDay => Interrupts.Count > 0;

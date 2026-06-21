@@ -65,6 +65,8 @@ namespace Greenkeeper.Sim.Economy
                 if (a.Spray) cost += cfg.SprayCost;
                 if (a.Aerate) cost += cfg.AerateCost;
                 if (a.FertilizerN > 0) cost += a.FertilizerN * cfg.FertCostPerN;
+                if (a.Fert.Active)
+                    cost += a.Fert.N * cfg.FertCostPerN + a.Fert.K * cfg.FertCostPerK + a.Fert.Fe * cfg.FertCostPerFe;
                 if (a.IrrigationMm > 0) cost += a.IrrigationMm * cfg.WaterCostPerMm;
             }
             return cost;

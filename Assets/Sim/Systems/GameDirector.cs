@@ -115,7 +115,7 @@ namespace Greenkeeper.Sim.Systems
                 var water = WaterBalance.Apply(z, result.Weather, action.IrrigationMm, _tuning); // 3 water
                 double gdd = SoilThermal.Apply(z, result.Weather, _tuning);          // 4 soil temp + GDD
                 Growth.Apply(z, result.Weather, gdd, water.DrainageVwc, _tuning, _grass); // 5 growth
-                OrganicMatter.Apply(z, _tuning);                                     // 6 OM + grain
+                OrganicMatter.Apply(z, _tuning, _grass);                             // 6 OM + grain
                 DiseaseSystem.Apply(z, action, ctx, zoneRng);                        // 7 disease
                 MaintenanceSystem.ApplyMechanical(z, action, _tuning);              // 8 maintenance
                 TurfDebtSystem.Apply(z, action, ctx);                               // 9 turf debt

@@ -15,6 +15,12 @@ namespace Greenkeeper.Sim.Config
         /// <summary>Temperature optimum for growth (degF).</summary>
         public double GrowthOptimumF = 65.0;
 
+        /// <summary>Optimal nitrogen band (nOptBand). Below = dollar-spot/weakness; above = brown-patch/
+        /// Pythium, thatch, weak roots, burn. Deviation either way is punished.</summary>
+        public double NOptMin = 40.0;
+        public double NOptMax = 60.0;
+        public double NOptMid => 0.5 * (NOptMin + NOptMax);
+
         /// <summary>Multiplier on disease susceptibility (1.0 = baseline dollar-spot susceptibility).</summary>
         public double DiseaseSusceptibility = 1.0;
 

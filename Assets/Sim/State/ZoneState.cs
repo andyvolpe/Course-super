@@ -30,6 +30,8 @@ namespace Greenkeeper.Sim.State
         public double TurfDebtPct;       // single mismanagement accumulator, 0..100 (§4.5)
         public double CarbReservesPct;   // carbohydrate reserves, 0..100
         public double NitrogenPct;       // available nitrogen, 0..100
+        public double PotassiumPct;      // available potassium (K) — stress-tolerance pool, 0..100
+        public double IronPct;           // foliar iron (Fe) — colour WITHOUT growth; decays fast, 0..100
         public double SoilTempF;         // lagged soil temperature
         public double GddAccum;          // accumulated growing degree days
         public double GrainPct;          // grain, 0..100
@@ -87,6 +89,8 @@ namespace Greenkeeper.Sim.State
             into.Add(TurfDebtPct);
             into.Add(CarbReservesPct);
             into.Add(NitrogenPct);
+            into.Add(PotassiumPct);
+            into.Add(IronPct);
             into.Add(SoilTempF);
             into.Add(GddAccum);
             into.Add(GrainPct);

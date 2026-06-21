@@ -24,7 +24,10 @@ namespace Greenkeeper.Sim.Legibility
             double fc = t.FieldCapacity(z.Soil, z.OrganicMatterPct);
 
             // --- Colour depth: nitrogen sufficiency SATURATES, so vigour == N-push (narrowing) ---
-            double nSufficiency = Mathx.Clamp01(z.NitrogenPct / t.NitrogenOptimum); // 1.0 at/over optimum
+            // Iron greens up like N FOR COLOUR ONLY — it adds to the same saturating curve, so a lean
+            // (in-band) green can be made to LOOK fed without the growth/disease cost of more N. Above
+            // optimum the curve is still flat, so fed and pushed remain indistinguishable (fairness).
+            double nSufficiency = Mathx.Clamp01((z.NitrogenPct + z.IronPct) / t.NitrogenOptimum);
             double densityNorm = Mathx.Clamp01(z.DensityPct / 100.0);
             // Depth driven by whichever is limiting; both vigorous (N=opt) and pushed (N>opt) hit 1.0.
             double depth = Mathx.Clamp01(0.35 + 0.65 * nSufficiency) * Mathx.Clamp01(0.4 + 0.6 * densityNorm);

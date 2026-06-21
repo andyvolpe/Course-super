@@ -73,6 +73,63 @@ namespace Greenkeeper.Sim.Config
         public double NitrogenUptakePerGrowth = 0.25;
         public double NitrogenLeachPerDrainage = 0.05; // N lost proportional to drainage volume
 
+        // ---- Fertility PROGRAM (N is a fork, not a one-way slider) ----------------
+        // Potassium (K) — a stress-tolerance pool, NOT a growth driver. Starts at the top of the N
+        // band so in-band feeding is never K-deficient by default; the player must keep K up when
+        // they push N (high N + low K = lush + fragile). No passive decline (K moves only via the program).
+        public double PotassiumStart = 60.0;
+        public double PotassiumOptimum = 60.0;
+        // Iron (Fe) — colour ONLY. No growth, no disease, no debt. Fades over a few days.
+        public double IronStart = 0.0;
+        public double IronDecayPerDay = 4.0;
+
+        // OVER-N consequences (Part A). All terms key off overN = max(0, N - grass.NOptMax), so they
+        // are exactly ZERO for in-band turf — the existing model is untouched until you over-feed.
+        public double OverNCarbDrainPerPt = 0.20;    // lush top growth SPENDS carbohydrate reserves
+        public double OverNRootShrinkPerPt = 0.010;  // weak, shallow roots (heat-stress collapse waiting)
+        public double OverNClipSurgePerPt = 0.05;    // surges clip volume (mow hours / scalp risk)
+        public double OverNOmPerPt = 0.015;          // accelerates thatch / organic-matter accrual
+        public double OverNStimpPenaltyPerPt = 0.04; // puffy, lush canopy fights green speed (Stimp)
+        public double RootDepthBaselineIn = 6.0;     // roots recover slowly toward this when fed correctly
+        public double RootRecoveryPerDay = 0.02;
+
+        // Heat/wear FRAGILITY from N:K imbalance + over-N lushness. Zero when K keeps pace with N and
+        // N is in-band (default K=60 >= any in-band N, so existing scenarios stay at zero).
+        public double HeatStressThresholdF = 80.0;          // Tmean above this stresses cool-season turf
+        public double FragilityHeatLossPerDegPerPt = 0.0020; // density/day per degF-over per fragility unit
+        public double FragilityWearLossPerPt = 0.010;        // extra density loss on a mow day per fragility unit
+        public double NKImbalanceWeight = 1.0;               // fragility from max(0, N - K)
+        public double OverNFragilityWeight = 0.5;            // fragility from over-N lushness
+        public double RootHeatLossPerDeg = 0.06;             // heat-stress density loss per degF-over per unit root deficit
+
+        // OVER-N disease: brown patch (warm) + Pythium (hot, near-saturated). Driven by HIGH N — the
+        // OPPOSITE end from dollar spot (which is a LOW-N risk). Folded into pressure via max(), so the
+        // dollar-spot path is unchanged when overN = 0. High K RESISTS these two (only).
+        public double BrownPatchTempCenterF = 85.0;
+        public double BrownPatchTempHalfWidthF = 12.0;
+        public double PythiumTempCenterF = 90.0;
+        public double PythiumTempHalfWidthF = 10.0;
+        public double HighNFavorabilityScale = 25.0;  // overN units mapping to full high-N favorability
+        public double HighNDiseaseMax = 1.4;          // cap on the high-N favorability factor
+        public double PythiumWetnessMin = 0.6;        // Pythium needs near-saturation to run
+        public double KDiseaseResistanceMax = 0.5;    // high K cuts brown-patch/Pythium favorability up to this
+
+        // Fertilizer APPLICATION model (source/release + foliar vs granular).
+        public double FoliarUptakeFraction = 0.9;     // leaf absorbs most of a (small) foliar dose
+        public double FoliarDoseSoftCap = 6.0;        // foliar N above this per app gives diminishing returns
+        public double FoliarOverdoseAbsorb = 0.25;    // absorbed fraction of the dose ABOVE the soft cap
+        public double FoliarOverdoseBurnPerPt = 0.04; // leaf burn per N pt dumped over the foliar soft cap
+        public double FoliarKFraction = 0.85;         // foliar K uptake fraction
+        public double GranularUptakeTempCenterF = 65.0;   // granular soil uptake is best in moderate soil temps
+        public double GranularUptakeTempHalfWidthF = 22.0;
+        public double GranularUptakeMoistureMinPct = 8.0;  // below this it's too dry to move nutrients
+        public double GranularUptakeMoistureFullPct = 18.0;
+        public double GranularUptakeRootFullIn = 6.0;      // shallow roots can't reach soil N
+        public double GranularKFractionFull = 0.9;
+        public double QuickReleaseBurnPerPt = 0.04;   // soluble shock-burn per available N pt (quick-release)
+        public double SlowReleaseBurnMult = 0.20;     // slow/organic barely burn
+        public double GranularDryBurnPerPt = 0.05;    // salt burn per unused N pt sitting on hot/dry soil
+
         // ---- Organic matter + grain (§4.7) ---------------------------------------
         public double OmFromGrowth = 0.02;     // OM accrual per growth unit (thatch)
         public double OmDecomposition = 0.01;  // daily microbial breakdown (absolute %)

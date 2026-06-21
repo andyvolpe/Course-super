@@ -33,13 +33,34 @@ namespace Greenkeeper.Sim.Systems
                 + action.IrrigationMm * t.IrrigationWetnessHrsPerMm
                 + Mathx.Max0(z.SoilMoisturePct - fc) * t.SaturatedExcessWetnessHrs;
             double wetnessFactor = Mathx.Clamp01(effectiveWetness / t.LeafWetnessOptimumHrs);
-            // Baseline susceptibility + starvation amplification, guarded and capped.
+            // Baseline susceptibility + starvation amplification, guarded and capped. LOW N is the
+            // dollar-spot risk (the under-fed end of the fork).
             double nitrogenFactor = Mathx.Clamp(
                 t.DiseaseNitrogenBase + (1.0 - z.NitrogenPct / t.NitrogenOptimum),
                 0.0, t.DiseaseNitrogenMax);
 
-            double favorability = Mathx.Max0(tempFactor) * Mathx.Max0(wetnessFactor)
-                                  * nitrogenFactor * ctx.Grass.DiseaseSusceptibility;
+            double dollarSpot = Mathx.Max0(tempFactor) * Mathx.Max0(wetnessFactor)
+                                * nitrogenFactor * ctx.Grass.DiseaseSusceptibility;
+
+            // HIGH N is the OTHER end of the fork: brown patch (warm) and Pythium (hot, near-saturated).
+            // Both ride on overN and are RESISTED by potassium. overN = 0 in-band, so these vanish and
+            // the dollar-spot path below is unchanged.
+            double overN = Mathx.Max0(z.NitrogenPct - ctx.Grass.NOptMax);
+            double highNFactor = Mathx.Clamp(overN / t.HighNFavorabilityScale, 0.0, t.HighNDiseaseMax);
+            double kResistance = 1.0 - t.KDiseaseResistanceMax * Mathx.Clamp01(z.PotassiumPct / t.PotassiumOptimum);
+
+            double brownPatch = Mathx.Max0(Mathx.Bell(w.TmeanF, t.BrownPatchTempCenterF, t.BrownPatchTempHalfWidthF))
+                                * Mathx.Max0(wetnessFactor) * highNFactor * kResistance * ctx.Grass.DiseaseSusceptibility;
+
+            double pythiumWet = Mathx.Max0(wetnessFactor - t.PythiumWetnessMin) / Mathx.Max0(1.0 - t.PythiumWetnessMin);
+            double pythium = Mathx.Max0(Mathx.Bell(w.TmeanF, t.PythiumTempCenterF, t.PythiumTempHalfWidthF))
+                             * Mathx.Clamp01(pythiumWet) * highNFactor * kResistance * ctx.Grass.DiseaseSusceptibility;
+
+            double highN = System.Math.Max(brownPatch, pythium);
+            ctx.Result.HighNDiseaseFavorability[z.Id] = highN;
+
+            // The day's driving disease is whichever path is hottest right now.
+            double favorability = System.Math.Max(dollarSpot, highN);
             if (z.SprayResidualDaysLeft > 0) favorability *= t.SprayResidualFavorabilityMult;
 
             // --- Per-cell pressure accrual (small jitter so a hot spot can lead) ---

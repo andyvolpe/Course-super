@@ -12,13 +12,19 @@ namespace Greenkeeper.Sim.Systems
     /// </summary>
     public static class MaintenanceSystem
     {
-        /// <summary>Applied before growth/disease: fertilizer raises available nitrogen.</summary>
+        /// <summary>
+        /// Applied before growth/disease: fertility raises the available nutrient pools. Two paths:
+        /// the legacy simple <see cref="ZoneAction.FertilizerN"/> (full-uptake N), and the full
+        /// fertility PROGRAM (<see cref="ZoneAction.Fert"/>) routed through <see cref="FertilitySystem"/>.
+        /// </summary>
         public static void ApplyInputs(ZoneState z, ZoneAction action, AgronomyTuning t)
         {
             if (z.Type == ZoneType.Bunker) return;
             double q = action.EffectiveQuality;
             if (action.FertilizerN > 0.0)
                 z.NitrogenPct = Mathx.Clamp(z.NitrogenPct + action.FertilizerN * q, 0.0, 100.0);
+            if (action.Fert.Active)
+                FertilitySystem.Apply(z, action.Fert, t);
         }
 
         /// <summary>
