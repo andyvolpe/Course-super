@@ -134,19 +134,19 @@ namespace Greenkeeper.Unity.Managers
         /// <summary>The crew's standard delegated program for a routine day (staff quality applies).</summary>
         private DayPlan AutoRoutinePlan()
         {
-            var w = new Crew.MaintenanceWindow(Crew);
+            var w = new MaintenanceWindow(Crew);
             foreach (var z in Course.Greens)
             {
-                var mow = Crew.TaskCatalog.WalkMow(z.Id); mow.Delegated = true; mow.AssignedCrewId = Crew[0].Id; w.TryAssign(mow);
-                var water = Crew.TaskCatalog.Water(z.Id); water.Delegated = true; water.AssignedCrewId = Crew[0].Id; w.TryAssign(water);
+                var mow = TaskCatalog.WalkMow(z.Id); mow.Delegated = true; mow.AssignedCrewId = Crew[0].Id; w.TryAssign(mow);
+                var water = TaskCatalog.Water(z.Id); water.Delegated = true; water.AssignedCrewId = Crew[0].Id; w.TryAssign(water);
             }
             // A scheduled (calendar) spray — the delegated routine, blind to the live tell by design.
             if (Director.Clock.DayIndex % 14 == 0)
                 foreach (var z in Course.Greens)
                 {
-                    var spray = Crew.TaskCatalog.Spray(z.Id); spray.Delegated = true; spray.AssignedCrewId = Crew[1 % Crew.Count].Id; w.TryAssign(spray);
+                    var spray = TaskCatalog.Spray(z.Id); spray.Delegated = true; spray.AssignedCrewId = Crew[1 % Crew.Count].Id; w.TryAssign(spray);
                 }
-            return w.ToDayPlan(Course, Crew.Delegation.Resolver(Crew));
+            return w.ToDayPlan(Course, Delegation.Resolver(Crew));
         }
 
         public void SaveGame()

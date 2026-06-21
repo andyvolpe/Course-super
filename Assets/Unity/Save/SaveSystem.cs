@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using Newtonsoft.Json;
 using UnityEngine;
 using Greenkeeper.Sim.State;
 
@@ -77,15 +76,12 @@ namespace Greenkeeper.Unity.Save
         }
     }
 
-    /// <summary>JSON save/load to persistent storage. Newtonsoft handles the nested dictionaries/arrays.</summary>
+    /// <summary>
+    /// JSON save/load to persistent storage via Unity's built-in JsonUtility (no external package).
+    /// The SaveData shape is JsonUtility-friendly: [Serializable] classes, a List, and double[] arrays.
+    /// </summary>
     public static class SaveSystem
     {
-        private static readonly JsonSerializerSettings Settings = new JsonSerializerSettings
-        {
-            Formatting = Formatting.Indented,
-            NullValueHandling = NullValueHandling.Ignore,
-        };
-
         public static string DefaultPath => Path.Combine(Application.persistentDataPath, "greenkeeper.save.json");
 
         public static void Save(SaveData data, string path = null)
@@ -102,11 +98,11 @@ namespace Greenkeeper.Unity.Save
         }
 
         // Exposed for round-trip testing without touching disk.
-        public static string Serialize(SaveData data) => JsonConvert.SerializeObject(data, Settings);
+        public static string Serialize(SaveData data) => JsonUtility.ToJson(data, true);
 
         public static SaveData Deserialize(string json)
         {
-            var data = JsonConvert.DeserializeObject<SaveData>(json);
+            var data = JsonUtility.FromJson<SaveData>(json);
             if (data != null && data.SchemaVersion != SaveData.CurrentSchemaVersion)
                 Debug.LogWarning($"[Greenkeeper] Save schemaVersion {data.SchemaVersion} != current {SaveData.CurrentSchemaVersion}; migration may be required.");
             return data;
