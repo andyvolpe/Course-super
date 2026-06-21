@@ -243,6 +243,7 @@ namespace Greenkeeper.Unity.UI
             return s;
         }
 
+        private string Money(double v) => $"<color=#{Hex(v < 0 ? T.Clay : T.Sage)}><b>${v:N0}</b></color>";
         private static string Short(string id) => string.IsNullOrEmpty(id) ? "(all)" : id;
         private static string Hex(Color c) => ColorUtility.ToHtmlStringRGB(c);
     }
