@@ -20,7 +20,8 @@ namespace Greenkeeper.Unity.Play
         public Renderer[] cellRenderers = new Renderer[9];
 
         private MaterialPropertyBlock _mpb;
-        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
+        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor"); // URP lit
+        private static readonly int ColorProp = Shader.PropertyToID("_Color");     // Built-in standard
         private static readonly int Lesions = Shader.PropertyToID("_Lesions");
         private static readonly int Thinning = Shader.PropertyToID("_Thinning");
         private static readonly int WetSheen = Shader.PropertyToID("_WetSheen");
@@ -45,8 +46,19 @@ namespace Greenkeeper.Unity.Play
                 var r = cellRenderers[i];
                 if (r == null) continue;
                 TellAppearance t = obs.Tells[i];
+
+                // Bake every tell channel into a single albedo so it shows on a plain lit shader
+                // (works in URP and Built-in; no custom shader needed). The custom GreenSurface shader,
+                // if used, still picks up the float channels below for procedural lesions/thinning.
+                Color c = new Color((float)t.BaseColor.R, (float)t.BaseColor.G, (float)t.BaseColor.B, 1f);
+                c = Color.Lerp(c, new Color(0.55f, 0.60f, 0.58f), (float)t.WiltTint * 0.6f);   // dry wilt
+                c = Color.Lerp(c, c * 0.6f, (float)t.WetSheen);                                 // wet sheen
+                c = Color.Lerp(c, new Color(0.72f, 0.64f, 0.40f), (float)t.Lesions * 0.85f);    // dollar-spot straw
+                c = Color.Lerp(c, new Color(0.34f, 0.26f, 0.18f), (float)t.Thinning * 0.7f);    // bare soil
+
                 r.GetPropertyBlock(_mpb);
-                _mpb.SetColor(BaseColor, new Color((float)t.BaseColor.R, (float)t.BaseColor.G, (float)t.BaseColor.B, 1f));
+                _mpb.SetColor(BaseColor, c);
+                _mpb.SetColor(ColorProp, c);
                 _mpb.SetFloat(Lesions, (float)t.Lesions);
                 _mpb.SetFloat(Thinning, (float)t.Thinning);
                 _mpb.SetFloat(WetSheen, (float)t.WetSheen);

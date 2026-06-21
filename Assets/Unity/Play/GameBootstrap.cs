@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 using Greenkeeper.Unity.Managers;
 using Greenkeeper.Unity.UI;
 using Greenkeeper.Unity.Input;
@@ -241,6 +242,8 @@ namespace Greenkeeper.Unity.Play
 
         private void OnGUI()
         {
+            ScaleGuiFonts(); // runs first (exec order -50) so every HUD this frame gets readable text
+
             if (_error != null)
             {
                 GUI.color = Color.red;
@@ -261,29 +264,35 @@ namespace Greenkeeper.Unity.Play
                 GUI.Label(new Rect(Screen.width / 2 - 4, Screen.height / 2 - 8, 12, 16), "+");
         }
 
+        private static void ScaleGuiFonts()
+        {
+            int fs = Mathf.Clamp(Mathf.RoundToInt(Screen.height / 55f), 13, 30);
+            GUI.skin.label.fontSize = fs;
+            GUI.skin.button.fontSize = fs;
+            GUI.skin.toggle.fontSize = fs;
+            GUI.skin.box.fontSize = fs;
+            GUI.skin.textField.fontSize = fs;
+        }
+
         // ---- materials ----
 
-        private static Material MakeGreenMaterial()
+        // Pick a lit shader that actually renders in the PROJECT'S active pipeline (avoids magenta).
+        private static Shader LitShader()
         {
-            Shader sh = Shader.Find("Greenkeeper/GreenSurface")
-                        ?? Shader.Find("Universal Render Pipeline/Lit")
-                        ?? Shader.Find("Standard")
-                        ?? Shader.Find("Sprites/Default");
-            if (sh == null) return null; // leave the primitive's default material rather than crash
-            var m = new Material(sh);
-            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", new Color(0.16f, 0.42f, 0.16f));
-            m.color = new Color(0.16f, 0.42f, 0.16f);
-            return m;
+            bool urp = GraphicsSettings.currentRenderPipeline != null;
+            Shader sh = urp ? Shader.Find("Universal Render Pipeline/Lit") : Shader.Find("Standard");
+            return sh ?? Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Sprites/Default");
         }
+
+        private static Material MakeGreenMaterial() => SolidMaterial(new Color(0.16f, 0.42f, 0.16f));
 
         private static Material SolidMaterial(Color c)
         {
-            Shader sh = Shader.Find("Universal Render Pipeline/Lit")
-                        ?? Shader.Find("Standard")
-                        ?? Shader.Find("Sprites/Default");
+            Shader sh = LitShader();
             if (sh == null) return null;
             var m = new Material(sh);
-            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c); // URP
+            if (m.HasProperty("_Color")) m.SetColor("_Color", c);         // Built-in
             m.color = c;
             return m;
         }
