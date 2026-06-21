@@ -76,25 +76,29 @@ namespace Greenkeeper.Unity.Play
                     }
                 }
                 TellAppearance t = obs.Tells.Length > 0 ? obs.Tells[idx] : default;
-                // Greens carry the full tell fidelity; the maintained off-green surfaces (fairway/tee/
-                // approach) are naturally a touch thinner/longer than a green, so we read their distress
-                // MUCH more gently — otherwise normal turf rendered as dark/brown "diseased" patches.
+
+                // The MPB colour MULTIPLIES the (already grass-coloured) turf texture, so HEALTHY turf must
+                // tint near-bright or the mesh comes out far darker than the untinted terrain (the dark
+                // patchwork). Start bright; only genuine problems pull it dark / off-colour.
                 bool green = zone.Type == ZoneType.Green;
-                float thinW = green ? 0.7f : 0.30f;
-                float overW = green ? 0.55f : 0.40f;
+                float healthy01 = Mathf.InverseLerp(0.70f, 0.34f, (float)t.BaseColor.G); // 1 = deep/fed, 0 = starved
+                c = Color.Lerp(new Color(0.86f, 0.84f, 0.52f),   // starved: pale yellow-green
+                               new Color(0.80f, 0.94f, 0.62f),   // fed/healthy: bright green
+                               healthy01);
 
-                c = new Color((float)t.BaseColor.R, (float)t.BaseColor.G, (float)t.BaseColor.B, 1f);
-                c = Color.Lerp(c, new Color(0.55f, 0.60f, 0.58f), (float)t.WiltTint * 0.6f);   // dry wilt
-                c = Color.Lerp(c, c * 0.7f, (float)t.WetSheen);                                 // wet sheen
-                c = Color.Lerp(c, new Color(0.72f, 0.64f, 0.40f), (float)t.Lesions * 0.85f);    // disease straw
-                c = Color.Lerp(c, new Color(0.34f, 0.26f, 0.18f), (float)t.Thinning * thinW);   // bare soil
+                float thinW = green ? 0.65f : 0.30f;
+                float overW = green ? 0.45f : 0.30f;
+                c = Color.Lerp(c, new Color(0.66f, 0.70f, 0.64f), (float)t.WiltTint * 0.5f);    // dry wilt: grey-green
+                c = Color.Lerp(c, c * 0.78f, (float)t.WetSheen * 0.7f);                          // wet: a touch darker
+                c = Color.Lerp(c, new Color(0.82f, 0.72f, 0.42f), (float)t.Lesions * 0.85f);     // disease straw
+                c = Color.Lerp(c, new Color(0.46f, 0.37f, 0.25f), (float)t.Thinning * thinW);    // bare soil
 
-                // Un-mown LENGTH reads shaggier: a longer canopy deepens to a softer olive (not near-black).
+                // Un-mown LENGTH reads shaggier: deepen toward a soft olive (never near-black).
                 double cut = zone.Surface != null ? zone.Surface.MowHeightIn : zone.MowHeightIn;
                 double range = zone.Type == ZoneType.Rough ? 4.0 : 1.5;
                 float over = Mathf.Clamp01((float)((zone.GrassHeightIn - cut) / range));
                 if (over > 0.01f)
-                    c = Color.Lerp(c, new Color(0.30f, 0.40f, 0.20f), over * overW);
+                    c = Color.Lerp(c, new Color(0.42f, 0.52f, 0.28f), over * overW);
             }
 
             _r.GetPropertyBlock(_mpb);
