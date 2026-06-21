@@ -26,6 +26,7 @@ namespace Greenkeeper.Unity.Play
         public float cellSizeM = 2.0f;
 
         private GameManager _game;
+        private GameObject _treePrefab; // optional Poly Haven tree (Resources/PolyHaven/Tree)
         private FirstPersonController _fp;
         private GreenInspectionController _inspect;
         private PuttingController _putt;
@@ -59,7 +60,7 @@ namespace Greenkeeper.Unity.Play
                 _game = BuildGameManager();
                 if (_game == null || _game.Course == null) { _error = "GameManager/course failed to build."; return; }
 
-                Material greenMat = MakeGreenMaterial();
+                _treePrefab = Resources.Load<GameObject>("PolyHaven/Tree"); // optional CC0 tree model
                 var greens = new System.Collections.Generic.List<GreenRenderer>();
                 int holes = Mathf.Max(1, holesToRender);
                 // Snaking grid routing: rows of 6 holes, alternate rows face back the other way (like a
@@ -75,7 +76,7 @@ namespace Greenkeeper.Unity.Play
                     float x = (back ? (cols - 1 - col) : col) * laneW;
                     float z = row * rowD;
                     float yaw = back ? 180f : 0f;          // back rows point -Z
-                    var gr = BuildHole(hole, new Vector3(x, 0f, z), yaw, greenMat);
+                    var gr = BuildHole(hole, new Vector3(x, 0f, z), yaw);
                     if (gr != null) greens.Add(gr);
                 }
 
@@ -98,13 +99,25 @@ namespace Greenkeeper.Unity.Play
 
         private void BuildLighting()
         {
+            // Optional Poly Haven HDRI sky (Assets/Resources/PolyHaven/Skybox.mat). Lights the scene too.
+            var sky = Resources.Load<Material>("PolyHaven/Skybox");
+            if (sky != null)
+            {
+                RenderSettings.skybox = sky;
+                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Skybox;
+                DynamicGI.UpdateEnvironment();
+            }
+            else
+            {
+                RenderSettings.ambientLight = new Color(0.45f, 0.5f, 0.5f);
+            }
+
             if (FindFirstObjectByType<Light>() != null) return;
             var go = new GameObject("Sun");
             var l = go.AddComponent<Light>();
             l.type = LightType.Directional;
             l.intensity = 1.1f;
             l.transform.rotation = Quaternion.Euler(55f, -30f, 0f);
-            RenderSettings.ambientLight = new Color(0.45f, 0.5f, 0.5f);
         }
 
         private void BuildGround()
@@ -117,7 +130,7 @@ namespace Greenkeeper.Unity.Play
             float centerZ = ((rows - 1) * 62f + 40f) * 0.5f;
             ground.transform.position = new Vector3(centerX, -0.05f, centerZ);
             ground.transform.localScale = new Vector3(34f, 1f, 34f); // 340m x 340m — covers all 18 holes
-            var mat = SolidMaterial(new Color(0.24f, 0.32f, 0.16f)); // native-rough backdrop
+            var mat = SurfaceMat("Ground", new Color(0.24f, 0.32f, 0.16f), 340f, 340f); // Poly Haven ground texture if present
             if (mat != null) ground.GetComponent<Renderer>().material = mat;
         }
 
@@ -137,7 +150,7 @@ namespace Greenkeeper.Unity.Play
         /// Lays out one whole hole in the world — rough pad, tee, fairway, approach, bunkers, and the
         /// 3x3 green at the far end — each quad driven by its sim zone via SurfaceRenderer/GreenRenderer.
         /// </summary>
-        private GreenRenderer BuildHole(int hole, Vector3 rootPos, float yawDeg, Material greenMat)
+        private GreenRenderer BuildHole(int hole, Vector3 rootPos, float yawDeg)
         {
             string h = hole.ToString("00");
 
@@ -157,16 +170,16 @@ namespace Greenkeeper.Unity.Play
             float fairCz = 6f + fairLen * 0.5f;
 
             // Native rough pad under everything (the miss-penalty surface you maintain).
-            BuildSurfaceQuad(T, $"rough-{h}", new Vector3(dogleg * 0.35f, -0.03f, greenZ * 0.5f + 3f),
+            BuildSurfaceQuad(T, $"rough-{h}", "Rough", new Vector3(dogleg * 0.35f, -0.03f, greenZ * 0.5f + 3f),
                              20f, greenZ + 14f, new Color(0.22f, 0.34f, 0.14f));
 
             // Playing corridor: tee -> fairway (drifts toward the dogleg) -> widening approach.
             if (_game.Course.Get($"tee-{h}") != null)
-                BuildSurfaceQuad(T, $"tee-{h}", new Vector3(0f, 0f, 2f), 4f, 5f, new Color(0.18f, 0.44f, 0.18f));
+                BuildSurfaceQuad(T, $"tee-{h}", "Tee", new Vector3(0f, 0f, 2f), 4f, 5f, new Color(0.18f, 0.44f, 0.18f));
             if (_game.Course.Get($"fairway-{h}") != null)
-                BuildSurfaceQuad(T, $"fairway-{h}", new Vector3(dogleg * 0.30f, 0f, fairCz), 9f, fairLen, new Color(0.20f, 0.42f, 0.18f));
+                BuildSurfaceQuad(T, $"fairway-{h}", "Fairway", new Vector3(dogleg * 0.30f, 0f, fairCz), 9f, fairLen, new Color(0.20f, 0.42f, 0.18f));
             if (_game.Course.Get($"approach-{h}") != null)
-                BuildSurfaceQuad(T, $"approach-{h}", new Vector3(dogleg * 0.7f, 0f, greenZ - 4.5f), 8f, 5f, new Color(0.17f, 0.43f, 0.17f));
+                BuildSurfaceQuad(T, $"approach-{h}", "Approach", new Vector3(dogleg * 0.7f, 0f, greenZ - 4.5f), 8f, 5f, new Color(0.17f, 0.43f, 0.17f));
 
             // Bunkering: two greenside (flanking the green) + an optional fairway bunker on the corner.
             BuildBunkerIfExists($"bunker-{h}-1", T, new Vector3(dogleg + 5f, -0.02f, greenZ - 1f));
@@ -174,18 +187,38 @@ namespace Greenkeeper.Unity.Play
             BuildBunkerIfExists($"bunker-{h}-3", T, new Vector3(dogleg * 0.5f + 5.5f, -0.02f, fairCz + fairLen * 0.2f));
 
             // The green at the far end (3x3 sub-cell renderer; ball/cup live on hole 1's green).
-            var gr = BuildGreen($"green-{h}", T, new Vector3(dogleg, 0f, greenZ), tilt, greenMat);
+            var gr = BuildGreen($"green-{h}", T, new Vector3(dogleg, 0f, greenZ), tilt);
             gr.game = _game;
+
+            ScatterTrees(T, hole, greenZ); // optional Poly Haven trees, well off the playing line
             return gr;
+        }
+
+        private void ScatterTrees(Transform parent, int hole, float greenZ)
+        {
+            if (_treePrefab == null) return;
+            var rnd = new System.Random(hole * 2237 + 5);
+            int n = 4 + rnd.Next(0, 4);
+            for (int i = 0; i < n; i++)
+            {
+                float side = (i % 2 == 0) ? 1f : -1f;           // alternate sides
+                float x = side * (9f + 4f * (float)rnd.NextDouble());  // outside the ±4.5m corridor
+                float z = 2f + (greenZ + 6f) * (float)rnd.NextDouble();
+                var tree = Instantiate(_treePrefab, parent);
+                tree.transform.localPosition = new Vector3(x, 0f, z);
+                tree.transform.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f);
+                float sc = 0.8f + 0.6f * (float)rnd.NextDouble();
+                tree.transform.localScale = Vector3.one * sc;
+            }
         }
 
         private void BuildBunkerIfExists(string zoneId, Transform parent, Vector3 localCenter)
         {
             if (_game.Course.Get(zoneId) == null) return;
-            BuildSurfaceQuad(parent, zoneId, localCenter, 3.4f, 3.4f, new Color(0.82f, 0.74f, 0.55f));
+            BuildSurfaceQuad(parent, zoneId, "Bunker", localCenter, 3.4f, 3.4f, new Color(0.82f, 0.74f, 0.55f));
         }
 
-        private GameObject BuildSurfaceQuad(Transform parent, string zoneId, Vector3 localCenter, float sizeX, float sizeZ, Color baseColor)
+        private GameObject BuildSurfaceQuad(Transform parent, string zoneId, string matKey, Vector3 localCenter, float sizeX, float sizeZ, Color baseColor)
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Plane); // faces +Y, has MeshCollider (walkable)
             go.name = $"Surf_{zoneId}";
@@ -193,7 +226,7 @@ namespace Greenkeeper.Unity.Play
             go.transform.localPosition = localCenter;
             go.transform.localScale = new Vector3(sizeX / 10f, 1f, sizeZ / 10f); // Plane is 10x10 at scale 1
             var mr = go.GetComponent<Renderer>();
-            var mat = SolidMaterial(baseColor);
+            var mat = SurfaceMat(matKey, baseColor, sizeX, sizeZ); // Poly Haven texture if present, else flat colour
             if (mat != null) mr.material = mat;
             var sr = go.AddComponent<SurfaceRenderer>();
             sr.game = _game;
@@ -203,7 +236,7 @@ namespace Greenkeeper.Unity.Play
 
         // ---- greens ----
 
-        private GreenRenderer BuildGreen(string zoneId, Transform parent, Vector3 localCenter, float tiltDeg, Material greenMat)
+        private GreenRenderer BuildGreen(string zoneId, Transform parent, Vector3 localCenter, float tiltDeg)
         {
             var holeGreen = new GameObject($"Green_{zoneId}");
             holeGreen.transform.SetParent(parent, false);
@@ -214,6 +247,8 @@ namespace Greenkeeper.Unity.Play
             gr.zoneId = zoneId;
             gr.cellRenderers = new Renderer[9];
 
+            // Poly Haven "Green" turf if present (shared across this green's 9 cells), else flat colour.
+            Material greenMat = SurfaceMat("Green", new Color(0.16f, 0.42f, 0.16f), cellSizeM, cellSizeM);
             float s = cellSizeM;
             for (int r = 0; r < 3; r++)
             {
@@ -350,7 +385,22 @@ namespace Greenkeeper.Unity.Play
             return sh ?? Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Sprites/Default");
         }
 
-        private static Material MakeGreenMaterial() => SolidMaterial(new Color(0.16f, 0.42f, 0.16f));
+        // ---- Poly Haven (optional) ----
+        // Drop CC0 materials into Assets/Resources/PolyHaven/<key>.mat and they're used automatically;
+        // missing ones fall back to the flat colour. SurfaceRenderer still tints them by turf health.
+
+        /// <summary>A per-quad material: the textured Poly Haven material if present (tiled to size), else a flat colour.</summary>
+        private static Material SurfaceMat(string key, Color fallback, float sizeX, float sizeZ)
+        {
+            var loaded = Resources.Load<Material>($"PolyHaven/{key}");
+            if (loaded == null) return SolidMaterial(fallback);
+            var m = new Material(loaded);                 // per-quad instance so tiling can match its size
+            const float tileMetres = 2.0f;               // one texture repeat ≈ every 2 m
+            var scale = new Vector2(Mathf.Max(1f, sizeX / tileMetres), Mathf.Max(1f, sizeZ / tileMetres));
+            if (m.HasProperty("_BaseMap")) m.SetTextureScale("_BaseMap", scale); // URP lit
+            m.mainTextureScale = scale;                  // Built-in / fallback
+            return m;
+        }
 
         private static Material SolidMaterial(Color c)
         {
