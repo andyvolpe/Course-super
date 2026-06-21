@@ -35,6 +35,7 @@ namespace Greenkeeper.Unity.Play
         private GameObject[] _treePrefabs; // real tree models from Resources/Trees/* (+ Resources/PolyHaven/Tree)
         private Material _trunkMat;        // shared so hundreds of trees don't spawn thousands of materials
         private Material[] _canopyMats;
+        private Dictionary<string, Material> _turfMats; // generated per-surface turf materials (cached)
         private FirstPersonController _fp;
         private GreenInspectionController _inspect;
         private PuttingController _putt;
@@ -185,7 +186,7 @@ namespace Greenkeeper.Unity.Play
             _grassMask = new float[GrassMaskRes, GrassMaskRes]; // filled while holes are built
             const float minY = -10f, sizeY = 20f;
 
-            var data = new TerrainData { heightmapResolution = 257 };
+            var data = new TerrainData { heightmapResolution = 513 }; // finer -> smoother hills
             data.size = new Vector3(width, sizeY, length);
 
             // Heights (heights[y,x]; y runs along Z/length, x along width).
@@ -207,16 +208,17 @@ namespace Greenkeeper.Unity.Play
                 Layer("Fairway", new Color(0.24f, 0.44f, 0.18f), 7f),
                 Layer("Ground", new Color(0.33f, 0.27f, 0.16f), 6f),
             };
-            int ar = 256; data.alphamapResolution = ar;
+            int ar = 512; data.alphamapResolution = ar; // finer + gentler blends -> soft transitions
             var alpha = new float[ar, ar, 3];
             for (int y = 0; y < ar; y++)
                 for (int x = 0; x < ar; x++)
                 {
                     float wx = minX + width * x / (ar - 1);
                     float wz = minZ + length * y / (ar - 1);
-                    float fair = Mathf.SmoothStep(0f, 1f, (Mathf.PerlinNoise(wx * 0.03f + 4f, wz * 0.03f + 9f) - 0.52f) * 5f);
-                    float dirt = Mathf.SmoothStep(0f, 1f, (Mathf.PerlinNoise(wx * 0.10f + 40f, wz * 0.10f + 70f) - 0.70f) * 6f);
-                    float rough = 1f;
+                    // Broad, gradual patches (low sharpening = wide feathered transitions); dirt rare.
+                    float fair = Mathf.SmoothStep(0f, 1f, (Mathf.PerlinNoise(wx * 0.018f + 4f, wz * 0.018f + 9f) - 0.5f) * 2.2f);
+                    float dirt = Mathf.SmoothStep(0f, 1f, (Mathf.PerlinNoise(wx * 0.05f + 40f, wz * 0.05f + 70f) - 0.80f) * 3.0f);
+                    float rough = 0.9f;
                     float sum = rough + fair + dirt;
                     alpha[y, x, 0] = rough / sum;
                     alpha[y, x, 1] = fair / sum;
@@ -236,7 +238,15 @@ namespace Greenkeeper.Unity.Play
             // Prefer a ready-made TerrainLayer (e.g. a NatureManufacture ground) dropped in by name.
             var nm = Resources.Load<TerrainLayer>($"TerrainLayers/{key}");
             if (nm != null) return nm;
-            return new TerrainLayer { diffuseTexture = TexOrColor(key, fallback), tileSize = new Vector2(tileSize, tileSize) };
+            // Else use the imported material's texture, or a generated turf/dirt (coloured, since terrain
+            // layers aren't tinted at runtime).
+            var mat = LoadSurfaceMaterial(key);
+            Texture2D tex = mat != null ? (mat.HasProperty("_BaseMap") ? mat.GetTexture("_BaseMap") : mat.mainTexture) as Texture2D : null;
+            if (tex == null)
+                tex = key == "Ground"
+                    ? TurfTexture(91, new Color(0.34f, 0.27f, 0.16f), 0.30f, 0, 0f)   // dirt
+                    : TurfTexture(key.GetHashCode(), new Color(0.22f, 0.40f, 0.18f), 0.22f, 0, 0f); // grass
+            return new TerrainLayer { diffuseTexture = tex, tileSize = new Vector2(tileSize, tileSize) };
         }
 
         /// <summary>Terrain tree instances massed at the edges/between holes — kept OFF every maintained
@@ -399,22 +409,6 @@ namespace Greenkeeper.Unity.Play
                     }
                 }
             }
-            t.SetPixels(px); t.Apply();
-            return t;
-        }
-
-        private static Texture2D TexOrColor(string key, Color fallback)
-        {
-            var m = LoadSurfaceMaterial(key);
-            Texture t = m != null ? (m.HasProperty("_BaseMap") ? m.GetTexture("_BaseMap") : m.mainTexture) : null;
-            return t as Texture2D ?? SolidTex(fallback);
-        }
-
-        private static Texture2D SolidTex(Color c)
-        {
-            var t = new Texture2D(4, 4);
-            var px = new Color[16];
-            for (int i = 0; i < px.Length; i++) px[i] = c;
             t.SetPixels(px); t.Apply();
             return t;
         }
@@ -850,24 +844,57 @@ namespace Greenkeeper.Unity.Play
         // Drop CC0 materials into Assets/Resources/PolyHaven/<key>.mat and they're used automatically;
         // missing ones fall back to the flat colour. SurfaceRenderer still tints them by turf health.
 
-        /// <summary>A per-quad material: the textured Poly Haven material if present (tiled to size), else a flat colour.</summary>
-        private static Material SurfaceMat(string key, Color fallback, float sizeX, float sizeZ)
+        /// <summary>Shared material for a procedural-mesh surface (UVs carry the tiling; colour set per-renderer
+        /// via MPB). Greens use a dedicated fine green turf — never the coarse fairway/forest fallback.</summary>
+        private Material SharedSurfaceMaterial(string key, Color color)
         {
-            var loaded = LoadSurfaceMaterial(key);
-            if (loaded == null) return SolidMaterial(fallback);
-            var m = new Material(loaded);                 // per-quad instance so tiling can match its size
-            const float tileMetres = 2.0f;               // one texture repeat ≈ every 2 m
-            var scale = new Vector2(Mathf.Max(1f, sizeX / tileMetres), Mathf.Max(1f, sizeZ / tileMetres));
-            if (m.HasProperty("_BaseMap")) m.SetTextureScale("_BaseMap", scale); // URP lit
-            m.mainTextureScale = scale;                  // Built-in / fallback
+            Material loaded = key == "Green" ? Resources.Load<Material>("PolyHaven/Green") : LoadSurfaceMaterial(key);
+            return loaded != null ? loaded : TurfMat(key);
+        }
+
+        /// <summary>A cached generated turf material per surface — fine green grain (+ subtle mow stripes),
+        /// near-grey so the SurfaceRenderer's health colour tints it; the fine grain hides tiling.</summary>
+        private Material TurfMat(string key)
+        {
+            _turfMats ??= new Dictionary<string, Material>();
+            if (_turfMats.TryGetValue(key, out var cached)) return cached;
+            Texture2D tex;
+            switch (key)
+            {
+                case "Green":    tex = TurfTexture(11, new Color(0.92f, 0.92f, 0.92f), 0.06f, 22, 0.05f); break; // fine, tight stripes
+                case "Fairway":  tex = TurfTexture(22, new Color(0.90f, 0.90f, 0.90f), 0.11f, 40, 0.11f); break; // mow stripes
+                case "Tee":      tex = TurfTexture(33, new Color(0.90f, 0.90f, 0.90f), 0.10f, 30, 0.08f); break;
+                case "Approach": tex = TurfTexture(44, new Color(0.90f, 0.90f, 0.90f), 0.10f, 34, 0.08f); break;
+                default:         tex = TurfTexture(55, new Color(0.88f, 0.88f, 0.88f), 0.22f, 0, 0f); break;     // rough/ground: mottled
+            }
+            var m = new Material(LitShader());
+            if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
+            if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
+            m.mainTexture = tex;
+            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.08f);
+            if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.08f);
+            _turfMats[key] = m;
             return m;
         }
 
-        /// <summary>Shared material for a procedural-mesh surface (UVs carry the tiling; colour set per-renderer via MPB).</summary>
-        private static Material SharedSurfaceMaterial(string key, Color color)
+        /// <summary>Soft mottled turf texture (Perlin) with optional mow stripes; tiles cleanly (no big features).</summary>
+        private static Texture2D TurfTexture(int seed, Color baseColor, float variation, int stripePx, float stripeStr)
         {
-            var loaded = LoadSurfaceMaterial(key);
-            return loaded != null ? loaded : SolidMaterial(color);
+            const int S = 256;
+            var t = new Texture2D(S, S, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, name = "turf" };
+            var px = new Color[S * S];
+            for (int y = 0; y < S; y++)
+            {
+                float stripe = stripePx > 0 ? ((y / stripePx) % 2 == 0 ? 1f : 1f - stripeStr) : 1f;
+                for (int x = 0; x < S; x++)
+                {
+                    float mott = Mathf.PerlinNoise(x * 0.06f + seed, y * 0.06f + seed);
+                    float k = Mathf.Clamp01(1f + (mott - 0.5f) * variation) * stripe;
+                    px[y * S + x] = new Color(baseColor.r * k, baseColor.g * k, baseColor.b * k, 1f);
+                }
+            }
+            t.SetPixels(px); t.Apply();
+            return t;
         }
 
         /// <summary>
