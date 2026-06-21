@@ -20,6 +20,7 @@ namespace Greenkeeper.Unity.Play
         public Renderer[] cellRenderers = new Renderer[9];
 
         private MaterialPropertyBlock _mpb;
+        private int _lastDay = -1; // tells only change when the sim day advances — recompute then only
         private static readonly int BaseColor = Shader.PropertyToID("_BaseColor"); // URP lit
         private static readonly int ColorProp = Shader.PropertyToID("_Color");     // Built-in standard
         private static readonly int Lesions = Shader.PropertyToID("_Lesions");
@@ -36,10 +37,13 @@ namespace Greenkeeper.Unity.Play
         private void LateUpdate()
         {
             if (game == null || game.Legibility == null || game.Course == null) return;
+            int day = game.Director.Clock.DayIndex;
+            if (day == _lastDay) return; // skip unchanged frames (keeps 18 holes cheap)
+            _lastDay = day;
             ZoneState zone = game.Course.Get(zoneId);
             if (zone == null) return;
 
-            ObservableZone obs = game.Legibility.Observe(zone, game.Director.Clock.DayIndex);
+            ObservableZone obs = game.Legibility.Observe(zone, day);
             int count = Mathf.Min(cellRenderers.Length, obs.Tells.Length);
             for (int i = 0; i < count; i++)
             {

@@ -19,6 +19,7 @@ namespace Greenkeeper.Unity.Play
 
         private Renderer _r;
         private MaterialPropertyBlock _mpb;
+        private int _lastDay = -1; // colours only change when the sim day advances — recompute then only
         private static readonly int BaseColor = Shader.PropertyToID("_BaseColor"); // URP lit
         private static readonly int ColorProp = Shader.PropertyToID("_Color");     // Built-in standard
 
@@ -32,6 +33,9 @@ namespace Greenkeeper.Unity.Play
         private void LateUpdate()
         {
             if (_r == null || game == null || game.Legibility == null || game.Course == null) return;
+            int day = game.Director.Clock.DayIndex;
+            if (day == _lastDay) return; // skip unchanged frames (keeps 18 holes cheap)
+            _lastDay = day;
             ZoneState zone = game.Course.Get(zoneId);
             if (zone == null) return;
 
