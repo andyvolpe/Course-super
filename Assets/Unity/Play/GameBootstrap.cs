@@ -29,30 +29,42 @@ namespace Greenkeeper.Unity.Play
         private GreenInspectionController _inspect;
         private PuttingController _putt;
         private bool _planMode = true; // start in Plan mode so the HUD is usable immediately
+        private string _error;
 
         private void Awake()
         {
-            BuildLighting();
-            BuildGround();
-            _game = BuildGameManager();
-            if (_game == null || _game.Course == null) { Debug.LogError("[Bootstrap] GameManager/course failed to build."); return; }
-
-            Material greenMat = MakeGreenMaterial();
-            var renderers = new System.Collections.Generic.List<GreenRenderer>();
-            for (int i = 0; i < greensToRender; i++)
+            try
             {
-                string id = $"green-{i + 1:00}";
-                if (_game.Course.Get(id) == null) continue;
-                var gr = BuildGreen(id, new Vector3(i * (greensToRender > 1 ? 12f : 0f), 0f, 10f), 3f + i * 2f, greenMat);
-                gr.game = _game;
-                renderers.Add(gr);
+                Debug.Log("[Bootstrap] building scene…");
+                BuildLighting();
+                BuildGround();
+                _game = BuildGameManager();
+                if (_game == null || _game.Course == null) { _error = "GameManager/course failed to build."; return; }
+
+                Material greenMat = MakeGreenMaterial();
+                var renderers = new System.Collections.Generic.List<GreenRenderer>();
+                for (int i = 0; i < greensToRender; i++)
+                {
+                    string id = $"green-{i + 1:00}";
+                    if (_game.Course.Get(id) == null) continue;
+                    var gr = BuildGreen(id, new Vector3(i * (greensToRender > 1 ? 12f : 0f), 0f, 10f), 3f + i * 2f, greenMat);
+                    gr.game = _game;
+                    renderers.Add(gr);
+                }
+
+                var (player, cam) = BuildPlayer();
+                BuildBallAndCup(player, cam, renderers.Count > 0 ? renderers[0] : null);
+                BuildHuds(player);
+
+                SetPlanMode(true);
+                Debug.Log($"[Bootstrap] scene built: {_game.Course.Zones.Count} zones, {renderers.Count} greens rendered. " +
+                          "TAB to walk; hold LMB to putt.");
             }
-
-            var (player, cam) = BuildPlayer();
-            BuildBallAndCup(player, cam, renderers.Count > 0 ? renderers[0] : null);
-            BuildHuds(player);
-
-            SetPlanMode(true);
+            catch (System.Exception e)
+            {
+                _error = e.ToString();
+                Debug.LogError("[Bootstrap] build FAILED: " + e);
+            }
         }
 
         // ---- world ----
@@ -73,8 +85,8 @@ namespace Greenkeeper.Unity.Play
             var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
             ground.transform.localScale = new Vector3(10f, 1f, 10f); // 100m x 100m
-            var mr = ground.GetComponent<Renderer>();
-            mr.material = SolidMaterial(new Color(0.30f, 0.40f, 0.22f)); // rough/fairway green
+            var mat = SolidMaterial(new Color(0.30f, 0.40f, 0.22f)); // rough/fairway green
+            if (mat != null) ground.GetComponent<Renderer>().material = mat;
         }
 
         private GameManager BuildGameManager()
@@ -110,7 +122,7 @@ namespace Greenkeeper.Unity.Play
                     cell.transform.localScale = new Vector3(s / 10f, 1f, s / 10f); // Plane is 10x10 at scale 1
                     cell.transform.localPosition = new Vector3((c - 1) * s, 0f, (r - 1) * s);
                     var mr = cell.GetComponent<Renderer>();
-                    mr.material = greenMat; // per-renderer MPB set by GreenRenderer
+                    if (greenMat != null) mr.material = greenMat; // per-renderer MPB set by GreenRenderer
                     gr.cellRenderers[r * 3 + c] = mr;
                 }
             }
@@ -126,11 +138,13 @@ namespace Greenkeeper.Unity.Play
             var cc = player.AddComponent<CharacterController>();
             cc.height = 1.8f; cc.radius = 0.3f; cc.center = new Vector3(0, 0.9f, 0);
 
-            var camGo = new GameObject("Camera");
+            // Reuse the scene's existing camera if there is one (avoids two cameras fighting); else make one.
+            Camera cam = Camera.main;
+            GameObject camGo = cam != null ? cam.gameObject : new GameObject("Camera");
+            if (cam == null) { cam = camGo.AddComponent<Camera>(); camGo.AddComponent<AudioListener>(); try { camGo.tag = "MainCamera"; } catch { } }
             camGo.transform.SetParent(player.transform, false);
             camGo.transform.localPosition = new Vector3(0f, 1.6f, 0f);
-            var cam = camGo.AddComponent<Camera>();
-            camGo.tag = "MainCamera";
+            camGo.transform.localRotation = Quaternion.identity;
 
             _fp = player.AddComponent<FirstPersonController>(); // Awake finds the child camera
 
@@ -154,14 +168,14 @@ namespace Greenkeeper.Unity.Play
             ball.transform.localScale = Vector3.one * 0.12f;
             ball.transform.position = greenCenter + up * 0.08f - firstGreen.transform.forward * 1.5f;
             Destroy(ball.GetComponent<Collider>()); // ball is kinematic-animated, no physics collider needed
-            ball.GetComponent<Renderer>().material = SolidMaterial(Color.white);
+            var ballMat = SolidMaterial(Color.white); if (ballMat != null) ball.GetComponent<Renderer>().material = ballMat;
 
             var cup = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cup.name = "Cup";
             cup.transform.localScale = new Vector3(0.10f, 0.02f, 0.10f);
             cup.transform.position = greenCenter + up * 0.02f + firstGreen.transform.forward * 1.5f;
             Destroy(cup.GetComponent<Collider>());
-            cup.GetComponent<Renderer>().material = SolidMaterial(Color.black);
+            var cupMat = SolidMaterial(Color.black); if (cupMat != null) cup.GetComponent<Renderer>().material = cupMat;
 
             var putt = player.GetComponent<PuttingController>();
             putt.ball = ball.transform;
@@ -213,6 +227,18 @@ namespace Greenkeeper.Unity.Play
 
         private void OnGUI()
         {
+            if (_error != null)
+            {
+                GUI.color = Color.red;
+                GUI.Label(new Rect(12, 40, Screen.width - 24, Screen.height - 80), "GameBootstrap failed to build the scene:\n\n" + _error);
+                GUI.color = Color.white;
+                return;
+            }
+            if (_game == null)
+            {
+                GUI.Label(new Rect(12, 40, 600, 40), "GameBootstrap: scene not built (check the Console).");
+                return;
+            }
             GUI.Label(new Rect(Screen.width / 2 - 220, 6, 460, 22),
                 _planMode ? "PLAN mode — click the morning window. TAB to walk the course."
                           : "COURSE mode — WASD walk, mouse look. LMB putt / RMB approach, E meter, Q scout. TAB to plan.");
@@ -225,18 +251,25 @@ namespace Greenkeeper.Unity.Play
 
         private static Material MakeGreenMaterial()
         {
-            Shader sh = Shader.Find("Greenkeeper/GreenSurface");
-            if (sh == null) sh = Shader.Find("Universal Render Pipeline/Lit");
-            if (sh == null) sh = Shader.Find("Standard");
+            Shader sh = Shader.Find("Greenkeeper/GreenSurface")
+                        ?? Shader.Find("Universal Render Pipeline/Lit")
+                        ?? Shader.Find("Standard")
+                        ?? Shader.Find("Sprites/Default");
+            if (sh == null) return null; // leave the primitive's default material rather than crash
             var m = new Material(sh);
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", new Color(0.16f, 0.42f, 0.16f));
             m.color = new Color(0.16f, 0.42f, 0.16f);
             return m;
         }
 
         private static Material SolidMaterial(Color c)
         {
-            Shader sh = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            Shader sh = Shader.Find("Universal Render Pipeline/Lit")
+                        ?? Shader.Find("Standard")
+                        ?? Shader.Find("Sprites/Default");
+            if (sh == null) return null;
             var m = new Material(sh);
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
             m.color = c;
             return m;
         }
