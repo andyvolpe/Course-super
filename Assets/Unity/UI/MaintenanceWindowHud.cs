@@ -1,4 +1,5 @@
 using UnityEngine;
+using Greenkeeper.Sim.Config;
 using Greenkeeper.Sim.Crew;
 using Greenkeeper.Sim.State;
 using Greenkeeper.Unity.Managers;

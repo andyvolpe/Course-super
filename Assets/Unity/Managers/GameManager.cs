@@ -101,12 +101,8 @@ namespace Greenkeeper.Unity.Managers
             Log($"Assists {(on ? "ON" : "OFF")} (surfacing only).");
         }
 
-        /// <summary>Resolve one day with the current morning plan (no-op until the player UI sets actions).</summary>
-        public void ResolveDay()
-        {
-            var result = Director.ResolveDay(BuildMorningPlan());
-            foreach (var line in result.Log) Log($"D{result.DayIndex}: {line}");
-        }
+        /// <summary>Resolve one day using the current morning window (used by the debug "Resolve Day" button).</summary>
+        public void ResolveDay() => ResolveWindow();
 
         /// <summary>
         /// Fidelity scaling (Phase 4.4 / GDD §1): fly through routine days on the delegated auto-program,
