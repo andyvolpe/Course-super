@@ -25,6 +25,11 @@ namespace Greenkeeper.Unity.UI
         private Vector2 _queueScroll;
         private float _rejectFlashUntil;
 
+        // Button actions are DEFERRED to the top of the next OnGUI pass and run OUTSIDE any layout
+        // group. Mutating state (adding tasks, resolving a day) mid-layout changes the control count
+        // between the Layout and Repaint passes, which corrupts IMGUI ("Invalid GUILayout state").
+        private System.Action _pending;
+
         private GreenkeeperTheme T => GreenkeeperTheme.I;
         private bool Plan => bootstrap == null || bootstrap.PlanMode;
         private int Day => game.Director.Clock.DayIndex;
@@ -32,6 +37,10 @@ namespace Greenkeeper.Unity.UI
         private void OnGUI()
         {
             if (game == null || game.Director == null || game.Course == null) return;
+
+            // Run any queued button action before opening a single layout group (see _pending).
+            if (_pending != null) { var act = _pending; _pending = null; act(); }
+
             int W = Screen.width, H = Screen.height;
             T.Ensure(Mathf.Clamp(H / 56, 13, 28));
 
@@ -150,9 +159,9 @@ namespace Greenkeeper.Unity.UI
             }
 
             GUILayout.BeginHorizontal();
-            if (Plan && GUILayout.Button("<", T.Button, GUILayout.Width(38))) _selectedGreen--;
+            if (Plan && GUILayout.Button("<", T.Button, GUILayout.Width(38))) _pending = () => _selectedGreen--;
             GUILayout.Label($"{id.ToUpper()}{(Plan ? "" : "  (looking)")}", T.Section);
-            if (Plan && GUILayout.Button(">", T.Button, GUILayout.Width(38))) _selectedGreen++;
+            if (Plan && GUILayout.Button(">", T.Button, GUILayout.Width(38))) _pending = () => _selectedGreen++;
             GUILayout.EndHorizontal();
 
             var zone = game.Course.Get(id);
@@ -221,7 +230,7 @@ namespace Greenkeeper.Unity.UI
         private void Row(params (string label, System.Action act)[] buttons)
         {
             GUILayout.BeginHorizontal();
-            foreach (var b in buttons) if (GUILayout.Button(b.label, T.Button)) b.act();
+            foreach (var b in buttons) if (GUILayout.Button(b.label, T.Button)) _pending = b.act; // deferred
             GUILayout.EndHorizontal();
         }
 
