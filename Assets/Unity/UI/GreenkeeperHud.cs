@@ -21,9 +21,9 @@ namespace Greenkeeper.Unity.UI
         public GreenInspectionController inspection;
         public PuttingController putt;
         public GameBootstrap bootstrap;
+        public RoomInteractionController room; // diegetic UI authority; this HUD is course-only now
 
         private int _selectedGreen;
-        private Vector2 _queueScroll;
         private float _rejectFlashUntil;
 
         // Button actions are DEFERRED to the top of the next OnGUI pass and run OUTSIDE any layout
@@ -48,14 +48,29 @@ namespace Greenkeeper.Unity.UI
             int topH = Mathf.Clamp(H / 17, 34, 54);
             int foreH = Mathf.Clamp(H / 7, 92, 140);
             int cTop = topH + 8, cBot = H - foreH - 8;
-            int leftW = (int)Mathf.Clamp(W * 0.30f, 340, 470);
             int rightW = (int)Mathf.Clamp(W * 0.30f, 340, 440);
 
-            DrawTopBar(W, topH);
-            DrawForecast(W, H, foreH);
-            if (Plan) DrawWindow(new Rect(10, cTop, leftW, cBot - cTop));
-            DrawContext(new Rect(W - rightW - 10, cTop, rightW, cBot - cTop));
-            if (!Plan) DrawCourseOverlay(W, H, foreH);
+            DrawTopBar(W, topH); // the "wristwatch": day / cash / condition is always glanceable
+
+            // A diegetic panel is open, or we're walking the building: the MaintenanceRoomHud owns the
+            // screen. This HUD only dresses the COURSE — the reads you earn by physically being there.
+            if (Plan) return;
+            if (room != null && room.InRoom)
+            {
+                if (room.CarryingMeter) DrawMeterBadge(W, H);
+                return;
+            }
+
+            if (inspection != null && !string.IsNullOrEmpty(inspection.AimedZoneId))
+                DrawContext(new Rect(W - rightW - 10, cTop, rightW, cBot - cTop));
+            DrawCourseOverlay(W, H, foreH);
+            if (room != null && room.CarryingMeter) DrawMeterBadge(W, H);
+        }
+
+        private void DrawMeterBadge(int W, int H)
+        {
+            GUI.Label(new Rect(W - 230, H / 2 + 24, 220, 26),
+                "<b>moisture meter</b> in hand — E on a green", T.GoldText);
         }
 
         private void DrawTopBar(int W, int topH)
@@ -76,79 +91,9 @@ namespace Greenkeeper.Unity.UI
             if (ladder != null && ladder.Current != null)
             { Sep(); GUILayout.Label($"{ladder.Current.Name} in <b>{Mathf.Max(0, ladder.DaysUntilNext(Day))}d</b>", T.Body); }
             GUILayout.FlexibleSpace();
-            GUILayout.Label(Plan ? "<b>PLAN</b>  ·  TAB to walk" : "<b>COURSE</b>  ·  TAB to plan", T.GoldText);
+            string where = Plan ? "<b>READING</b>" : (room != null && room.InRoom ? "<b>MAINTENANCE BLDG</b>  ·  E to use" : "<b>ON THE COURSE</b>");
+            GUILayout.Label(where, T.GoldText);
             GUILayout.EndHorizontal();
-            GUILayout.EndArea();
-        }
-
-        private void DrawForecast(int W, int H, int foreH)
-        {
-            if (game.Forecast == null) return;
-            GUILayout.BeginArea(new Rect(0, H - foreH, W, foreH), T.Panel);
-            GUILayout.Label("FORECAST  —  uncertainty widens further out", T.Section);
-            GUILayout.BeginHorizontal();
-            foreach (var d in game.Forecast.Upcoming(Day))
-            {
-                GUILayout.BeginVertical(GUILayout.Width(150));
-                string warn = (d.PredictedHeatSpike ? $"<color=#{Hex(T.Clay)}>HEAT</color> " : "")
-                            + (d.PredictedStorm ? "<color=#9CC0E8>STORM</color> " : "")
-                            + (d.PredictedFrost ? "<color=#BFE0EC>FROST</color> " : "");
-                GUILayout.Label($"<b>+{d.DaysOut}d</b>  {warn}", T.Body);
-                GUILayout.Label($"{d.Predicted.TmaxF:0}/{d.Predicted.TminF:0}°F ±{d.TempBandF:0}", T.Dim);
-                GUILayout.Label($"rain {d.Predicted.RainMm:0}±{d.RainBandMm:0} · hum {d.Predicted.Humidity:0%}", T.Dim);
-                GUILayout.EndVertical();
-            }
-            GUILayout.EndHorizontal();
-            GUILayout.EndArea();
-        }
-
-        private void DrawWindow(Rect area)
-        {
-            var w = game.Window;
-            GUILayout.BeginArea(area, T.Panel);
-            GUILayout.Label("MORNING WINDOW", T.Section);
-
-            float frac = w.BudgetHours > 0 ? (float)(w.UsedHours / w.BudgetHours) : 0;
-            var br = GUILayoutUtility.GetRect(10, 20, GUILayout.ExpandWidth(true));
-            T.Bar(br, frac, $"crew hours  {w.UsedHours:F1} / {w.BudgetHours:F0}");
-            if (Time.realtimeSinceStartup < _rejectFlashUntil)
-                GUILayout.Label($"<color=#{Hex(T.Clay)}>not enough hours — cut something</color>", T.Body);
-
-            GUILayout.Space(6);
-            GUILayout.Label("Order for all greens", T.Dim);
-            Row(("Mow", () => ForEachGreen(g => TaskCatalog.WalkMow(g.Id))),
-                ("Roll", () => ForEachGreen(g => TaskCatalog.Roll(g.Id))),
-                ("Spray", () => ForEachGreen(g => TaskCatalog.Spray(g.Id))));
-            Row(("Water", () => ForEachGreen(g => TaskCatalog.Water(g.Id))),
-                ("Aerate", () => ForEachGreen(g => TaskCatalog.Aerate(g.Id))));
-            GUILayout.Label("Fertility (all greens)", T.Dim);
-            Row(("Foliar N+K", () => ForEachGreen(g => TaskCatalog.FeedFoliar(g.Id))),
-                ("Granular slow", () => ForEachGreen(g => TaskCatalog.FeedGranularSlow(g.Id))));
-            Row(("Granular QUICK", () => ForEachGreen(g => TaskCatalog.FeedGranularQuick(g.Id))),
-                ("Iron — colour", () => ForEachGreen(g => TaskCatalog.Iron(g.Id))));
-            GUILayout.Label("Surfaces (whole course — competes for the same hours)", T.Dim);
-            Row(("Mow fairways", () => AddTask(TaskCatalog.MowFairwaysAll())),
-                ("Mow rough", () => AddTask(TaskCatalog.MowRoughAll())),
-                ("Mow tees", () => AddTask(TaskCatalog.MowTeesAll())));
-            Row(("Rake bunkers", () => AddTask(TaskCatalog.RakeBunkers())),
-                ("Triplex greens", () => AddTask(TaskCatalog.Triplex())),
-                ("Clear", () => game.BeginWindow()));
-
-            GUILayout.Space(6);
-            GUILayout.Label($"Queue · {w.Accepted.Count} task(s)", T.Dim);
-            _queueScroll = GUILayout.BeginScrollView(_queueScroll, GUILayout.ExpandHeight(true));
-            foreach (var task in w.Accepted)
-            {
-                GUILayout.BeginHorizontal();
-                GUILayout.Label($"{task.Type} {Short(task.ZoneId)} · {task.HoursCost:F1}h", T.Body);
-                GUILayout.FlexibleSpace();
-                task.Delegated = GUILayout.Toggle(task.Delegated, task.Delegated ? "staff" : "me", T.Toggle, GUILayout.Width(76));
-                GUILayout.EndHorizontal();
-            }
-            GUILayout.EndScrollView();
-
-            Row(("RESOLVE DAY", () => game.ResolveWindow()),
-                ("SKIP quiet days", () => game.SkipRoutineDays()));
             GUILayout.EndArea();
         }
 

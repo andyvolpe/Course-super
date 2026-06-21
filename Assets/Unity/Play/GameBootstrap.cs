@@ -52,11 +52,15 @@ namespace Greenkeeper.Unity.Play
         private FirstPersonController _fp;
         private GreenInspectionController _inspect;
         private PuttingController _putt;
-        private bool _planMode = true; // start in Plan mode so the HUD is usable immediately
+        private RoomInteractionController _interaction; // owns cursor/look gating now (diegetic UI)
+        private Vector3 _roomSpawn;                      // where the player wakes up inside the building
+        private Vector3 _roomCenter;                     // world centre of the maintenance building
+        private Vector2 _roomHalf = new Vector2(6f, 5f); // interior half-extents (X,Z)
+        private const float RoomCx = -22f, RoomCz = 4f;  // building location (kept clear of trees/grass)
         private string _error;
 
-        /// <summary>True when the cursor is free for planning (vs Course mode walking/putting).</summary>
-        public bool PlanMode => _planMode;
+        /// <summary>True when a diegetic panel is open (cursor free) — kept for the course HUD's layout.</summary>
+        public bool PlanMode => _interaction != null && _interaction.PanelOpen;
 
         /// <summary>
         /// Auto-boot: when you enter Play mode in ANY scene, if there's no GameBootstrap already, spawn
@@ -113,6 +117,9 @@ namespace Greenkeeper.Unity.Play
                 if (_terrain == null || _treePrefabs == null || _treePrefabs.Length == 0)
                     BuildPerimeterTrees(maxXForTrees: (Cols - 1) * LaneW, maxZForTrees: ((holes + Cols - 1) / Cols - 1) * RowD + 540f);
 
+                // Keep the maintenance building footprint clear of scattered trees/grass.
+                StampGrassMask(RoomCx, RoomCz, 10f);
+
                 // Terrain trees (after holes so the mask is filled — they avoid the surfaces). Detail
                 // grass is OFF by default: URP renders terrain detail grass (esp. imported mesh grass)
                 // near-black, which shows as dark patches. Splat ground + trees carry the look.
@@ -125,13 +132,14 @@ namespace Greenkeeper.Unity.Play
                 // Lit grass mesh tufts in the rough fringe around every hole (URP-safe; terrain detail is dark).
                 if (enableGrassObjects) ScatterGrassObjects();
 
+                BuildRoom(); // the maintenance building the day starts in (diegetic interface)
+
                 var (player, cam) = BuildPlayer();
                 BuildBallAndCup(player, holesViz);
                 BuildHuds(player);
 
-                SetPlanMode(true);
-                Debug.Log($"[Bootstrap] scene built: {_game.Course.Zones.Count} zones, {holesViz.Count} holes rendered " +
-                          "(organic tee/fairway/approach/green/rough/bunkers + pins). TAB to walk; hold LMB to play.");
+                Debug.Log($"[Bootstrap] scene built: {_game.Course.Zones.Count} zones, {holesViz.Count} holes rendered. " +
+                          "Day starts in the maintenance building — E to use objects, walk out the door to the course.");
             }
             catch (System.Exception e)
             {
@@ -791,12 +799,105 @@ namespace Greenkeeper.Unity.Play
             return root;
         }
 
+        // ---- the maintenance building (diegetic interface, GDD §5.3) ----
+
+        /// <summary>
+        /// Build the placeholder (cube-grey) maintenance building the day starts in: a small first-person
+        /// room with a doorway onto the course and the physical objects the player uses to manage the
+        /// course — the wall course-map, the wall calendar + crew board, and the desk (NOAA forecast,
+        /// soil clipboard, moisture meter, fert/spray log). Art is Milestone B; this is the interaction
+        /// model. Each interactable carries a <see cref="DiegeticObject"/> the controller raycasts for.
+        /// </summary>
+        private void BuildRoom()
+        {
+            // Sit the building off to the side of hole 1 (the course extends +X/+Z; this tucks into -X).
+            float cx = RoomCx, cz = RoomCz;
+            float floorY = SurfaceGroundY(cx, cz);
+            _roomCenter = new Vector3(cx, floorY, cz);
+            float hx = _roomHalf.x, hz = _roomHalf.y;     // interior half-extents
+            const float wh = 3.2f, wt = 0.3f, door = 2.2f, doorH = 2.3f;
+
+            var root = new GameObject("MaintenanceBuilding").transform;
+            root.position = _roomCenter; // local space: floor at y=0, interior x∈[-hx,hx], z∈[-hz,hz]
+
+            Color wall = new Color(0.62f, 0.62f, 0.60f);
+            Color floor = new Color(0.48f, 0.48f, 0.47f);
+            Color trim = new Color(0.55f, 0.55f, 0.54f);
+
+            Box("Floor", root, new Vector3(0, -0.1f, 0), new Vector3(2 * hx, 0.2f, 2 * hz), floor);
+            Box("Ceiling", root, new Vector3(0, wh, 0), new Vector3(2 * hx, 0.2f, 2 * hz), wall, collider: false);
+            Box("Wall-Z+", root, new Vector3(0, wh / 2, hz), new Vector3(2 * hx, wh, wt), wall);
+            Box("Wall-Z-", root, new Vector3(0, wh / 2, -hz), new Vector3(2 * hx, wh, wt), wall);
+            Box("Wall-X-", root, new Vector3(-hx, wh / 2, 0), new Vector3(wt, wh, 2 * hz), wall);
+            // +X wall has a centred doorway onto the course: two jambs + a lintel.
+            float seg = (2 * hz - door) / 2f, segC = (door / 2f + seg / 2f);
+            Box("Door-jamb+", root, new Vector3(hx, wh / 2, segC), new Vector3(wt, wh, seg), wall);
+            Box("Door-jamb-", root, new Vector3(hx, wh / 2, -segC), new Vector3(wt, wh, seg), wall);
+            Box("Door-lintel", root, new Vector3(hx, (doorH + wh) / 2, 0), new Vector3(wt, wh - doorH, door), wall);
+
+            // A soft interior light so the room reads (the sun is outside).
+            var lampGo = new GameObject("RoomLight");
+            lampGo.transform.SetParent(root, false);
+            lampGo.transform.localPosition = new Vector3(0, wh - 0.4f, 0);
+            var lamp = lampGo.AddComponent<Light>();
+            lamp.type = LightType.Point; lamp.range = 16f; lamp.intensity = 1.4f; lamp.color = new Color(1f, 0.97f, 0.9f);
+
+            // The desk against the back (-X) wall.
+            Box("Desk", root, new Vector3(-hx + 0.9f, 0.5f, 0), new Vector3(1.4f, 1.0f, 2.6f), trim);
+            float deskTop = 1.0f, deskX = -hx + 0.9f;
+
+            // ---- wall stations ----
+            // Course map: the keystone, big on the +Z wall.
+            Station("CourseMap", root, new Vector3(0, 1.7f, hz - wt / 2 - 0.03f), new Vector3(3.4f, 1.8f, 0.06f),
+                    new Color(0.40f, 0.50f, 0.42f), DiegeticKind.CourseMap, "Read the course map");
+            // Calendar + crew board side-by-side on the -Z wall.
+            Station("Calendar", root, new Vector3(-2.4f, 1.7f, -hz + wt / 2 + 0.03f), new Vector3(2.6f, 1.6f, 0.06f),
+                    new Color(0.50f, 0.46f, 0.36f), DiegeticKind.Calendar, "Open the calendar");
+            Station("CrewBoard", root, new Vector3(2.4f, 1.7f, -hz + wt / 2 + 0.03f), new Vector3(2.6f, 1.6f, 0.06f),
+                    new Color(0.44f, 0.44f, 0.50f), DiegeticKind.CrewBoard, "Check the crew board");
+
+            // ---- desk items ----
+            Station("Forecast", root, new Vector3(deskX, deskTop, -0.9f), new Vector3(0.45f, 0.06f, 0.35f),
+                    new Color(0.80f, 0.78f, 0.70f), DiegeticKind.Forecast, "Read the NOAA forecast");
+            Station("SoilClipboard", root, new Vector3(deskX, deskTop, -0.3f), new Vector3(0.4f, 0.05f, 0.32f),
+                    new Color(0.72f, 0.70f, 0.62f), DiegeticKind.SoilClipboard, "Read the soil clipboard");
+            Station("MoistureMeter", root, new Vector3(deskX, deskTop + 0.05f, 0.3f), new Vector3(0.18f, 0.12f, 0.3f),
+                    new Color(0.30f, 0.40f, 0.30f), DiegeticKind.MoistureMeter, "the moisture meter", pickup: true);
+            Station("FertLog", root, new Vector3(deskX, deskTop, 0.9f), new Vector3(0.42f, 0.07f, 0.32f),
+                    new Color(0.66f, 0.62f, 0.55f), DiegeticKind.FertLog, "Read the fert / spray log");
+
+            // Wake up standing in the middle of the room, facing the doorway (+X).
+            _roomSpawn = new Vector3(cx, floorY + 1.3f, cz);
+        }
+
+        private GameObject Box(string name, Transform parent, Vector3 localPos, Vector3 scale, Color color, bool collider = true)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            go.name = name;
+            if (!collider) { var col = go.GetComponent<Collider>(); if (col != null) Destroy(col); }
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = localPos;
+            go.transform.localScale = scale;
+            var m = SolidMaterial(color); if (m != null) go.GetComponent<Renderer>().sharedMaterial = m;
+            return go;
+        }
+
+        private void Station(string name, Transform parent, Vector3 localPos, Vector3 scale, Color color,
+                             DiegeticKind kind, string label, bool pickup = false)
+        {
+            var go = Box(name, parent, localPos, scale, color); // keeps its box collider for the interaction ray
+            var d = go.AddComponent<DiegeticObject>();
+            d.Kind = kind; d.Label = label; d.IsPickup = pickup;
+        }
+
         // ---- player ----
 
         private (GameObject player, Camera cam) BuildPlayer()
         {
             var player = new GameObject("Player");
-            player.transform.position = new Vector3(0f, SurfaceGroundY(0f, 0f) + 1.3f, 0f); // stand on hole-1 tee
+            player.transform.position = _roomSpawn != Vector3.zero
+                ? _roomSpawn                                          // wake up inside the maintenance building
+                : new Vector3(0f, SurfaceGroundY(0f, 0f) + 1.3f, 0f); // (fallback) hole-1 tee
             var cc = player.AddComponent<CharacterController>();
             cc.height = 1.8f; cc.radius = 0.3f; cc.center = new Vector3(0, 0.9f, 0);
 
@@ -816,6 +917,12 @@ namespace Greenkeeper.Unity.Play
 
             _putt = player.AddComponent<PuttingController>();
             _putt.game = _game; _putt.cam = cam;
+
+            _interaction = player.AddComponent<RoomInteractionController>();
+            _interaction.game = _game; _interaction.cam = cam; _interaction.bootstrap = this;
+            _interaction.fp = _fp; _interaction.inspection = _inspect; _interaction.putt = _putt;
+            _interaction.roomCenter = _roomCenter; _interaction.roomHalf = _roomHalf;
+            _inspect.room = _interaction; // metering on a green needs the handheld meter carried out
 
             return (player, cam);
         }
@@ -858,24 +965,15 @@ namespace Greenkeeper.Unity.Play
             hud.inspection = _inspect;
             hud.putt = _putt;
             hud.bootstrap = this;
+            hud.room = _interaction;
+
+            var roomHud = ui.AddComponent<MaintenanceRoomHud>();
+            roomHud.game = _game;
+            roomHud.room = _interaction;
         }
 
         // ---- modes / input ----
-
-        private void Update()
-        {
-            if (UnityEngine.Input.GetKeyDown(KeyCode.Tab)) SetPlanMode(!_planMode);
-        }
-
-        private void SetPlanMode(bool plan)
-        {
-            _planMode = plan;
-            if (_fp != null) _fp.enabled = !plan;          // stop mouse-look while planning
-            if (_inspect != null) _inspect.enabled = !plan; // no scouting/metering while clicking HUD
-            if (_putt != null) _putt.enabled = !plan;       // no accidental putt-charge on HUD clicks
-            Cursor.lockState = plan ? CursorLockMode.None : CursorLockMode.Locked;
-            Cursor.visible = plan;
-        }
+        // Cursor / look / putt gating now lives in RoomInteractionController (the diegetic UI authority).
 
         private void OnGUI()
         {

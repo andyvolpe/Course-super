@@ -17,6 +17,7 @@ namespace Greenkeeper.Unity.Play
     {
         public GameManager game;
         public Camera cam;
+        public RoomInteractionController room; // the moisture meter is a handheld you must carry out
         public float reach = 6f;
         public LayerMask greenMask = ~0;
 
@@ -42,7 +43,7 @@ namespace Greenkeeper.Unity.Play
             if (AimedZoneId == null) return;
             int day = game.Director.Clock.DayIndex;
 
-            if (UnityEngine.Input.GetKeyDown(meterKey))
+            if (UnityEngine.Input.GetKeyDown(meterKey) && (room == null || room.CarryingMeter))
             {
                 ZoneState z = game.Course.Get(AimedZoneId);
                 if (z != null) LastMeterReading = (float)game.Legibility.MeterReading(z, AimedCellIndex, day);
