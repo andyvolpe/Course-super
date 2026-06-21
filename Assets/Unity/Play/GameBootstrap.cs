@@ -147,9 +147,9 @@ namespace Greenkeeper.Unity.Play
         /// <summary>Rolling site elevation (metres) at a world XZ — broad hills + a little finer relief.</summary>
         private float GroundY(float x, float z)
         {
-            float broad = Mathf.PerlinNoise(x * 0.012f + 11.3f, z * 0.012f + 7.1f) - 0.5f;   // ±0.5
-            float fine = Mathf.PerlinNoise(x * 0.05f + 31.7f, z * 0.05f + 19.2f) - 0.5f;     // ±0.5
-            return broad * 11f + fine * 1.6f; // ~±6 m of roll
+            float broad = Mathf.PerlinNoise(x * 0.010f + 11.3f, z * 0.010f + 7.1f) - 0.5f;   // ±0.5
+            float fine = Mathf.PerlinNoise(x * 0.04f + 31.7f, z * 0.04f + 19.2f) - 0.5f;     // ±0.5
+            return broad * 9f + fine * 0.7f; // gentle roll (~±5 m), smooth enough for clean greens
         }
 
         /// <summary>Height the SURFACES drape onto — the live Terrain if present, else the GroundY function.</summary>
@@ -328,7 +328,7 @@ namespace Greenkeeper.Unity.Play
                 new Vector2(bend, length * 0.72f),
                 new Vector2(bend * 0.95f, length),
             };
-            var center = ProcMesh.Smooth(ctrl, 6);
+            var center = ProcMesh.Smooth(ctrl, 10);
             int m = center.Count;
 
             // Half-widths bulge in the middle (narrow tee + green).
@@ -342,30 +342,30 @@ namespace Greenkeeper.Unity.Play
                 roughHalf[i] = w + 6.5f;
             }
 
-            // Rough corridor then fairway on top — both draped onto the rolling terrain. Small lifts so
-            // each surface layers cleanly on the one beneath WITHOUT floating above the ground.
+            // Rough corridor then fairway on top — both draped onto the rolling terrain. Tiny lifts so
+            // each surface layers cleanly on the one beneath without floating above the ground.
             BuildMesh(T, $"rough-{h}", "Rough", ProcMesh.Ribbon(center, roughHalf, 5f), 0.0f, new Color(0.20f, 0.32f, 0.13f));
             if (_game.Course.Get($"fairway-{h}") != null)
-                BuildMesh(T, $"fairway-{h}", "Fairway", ProcMesh.Ribbon(center, fairHalf, 5f), 0.03f, new Color(0.22f, 0.44f, 0.18f));
+                BuildMesh(T, $"fairway-{h}", "Fairway", ProcMesh.Ribbon(center, fairHalf, 5f), 0.02f, new Color(0.22f, 0.44f, 0.18f));
 
             // Tee box (barely proud of grade).
             Vector2 teeP = center[0];
             if (_game.Course.Get($"tee-{h}") != null)
-                BuildBlob(T, $"tee-{h}", "Tee", teeP, ProcMesh.EllipseRadii(2.4f, 3.0f, 18, 0.10f, hole * 31 + 1, 0f), 0.05f, new Color(0.20f, 0.46f, 0.20f));
+                BuildBlob(T, $"tee-{h}", "Tee", teeP, ProcMesh.EllipseRadii(2.4f, 3.0f, 24, 0.08f, hole * 31 + 1, 0f), 0.04f, new Color(0.20f, 0.46f, 0.20f));
 
             // Green complex: apron, then a kidney green just proud of grade (no floating disc).
             Vector2 greenP = center[m - 1];
             if (_game.Course.Get($"approach-{h}") != null)
             {
                 Vector2 apr = Vector2.Lerp(center[m - 2], greenP, 0.35f);
-                BuildBlob(T, $"approach-{h}", "Approach", apr, ProcMesh.EllipseRadii(4.5f, 3.5f, 20, 0.10f, hole * 53 + 7, 0f), 0.04f, new Color(0.20f, 0.45f, 0.19f));
+                BuildBlob(T, $"approach-{h}", "Approach", apr, ProcMesh.EllipseRadii(4.5f, 3.5f, 30, 0.08f, hole * 53 + 7, 0f), 0.03f, new Color(0.20f, 0.45f, 0.19f));
             }
             float gx = 4.2f + 1.2f * R(), gz = 4.8f + 1.4f * R();
             var greenObj = BuildBlob(T, $"green-{h}", "Green", greenP,
-                ProcMesh.EllipseRadii(gx, gz, 26, 0.08f, hole * 71 + 3, 0.22f), 0.06f, new Color(0.16f, 0.42f, 0.16f));
+                ProcMesh.EllipseRadii(gx, gz, 48, 0.06f, hole * 71 + 3, 0.20f), 0.04f, new Color(0.16f, 0.42f, 0.16f));
             var gsr = greenObj.GetComponent<SurfaceRenderer>();
             gsr.spatialGreen = true; gsr.greenHalf = new Vector2(gx, gz);
-            greenObj.transform.localRotation = Quaternion.Euler(2.5f + 3.0f * R(), 30f * R(), 0f); // break
+            greenObj.transform.localRotation = Quaternion.Euler(0f, 30f * R(), 0f); // yaw only — tilt caused floating
 
             // Bunkers (organic, sunken blobs): two greenside, one on the inside of the dogleg.
             Vector2 perp = Perp(center[m - 1] - center[m - 2]);
@@ -376,14 +376,14 @@ namespace Greenkeeper.Unity.Play
 
             // Pin + cup sit on the green surface.
             Vector3 greenWorld = T.TransformPoint(new Vector3(greenP.x, 0f, greenP.y));
-            float greenSurfaceY = SurfaceGroundY(greenWorld.x, greenWorld.z) + 0.06f;
+            float greenSurfaceY = SurfaceGroundY(greenWorld.x, greenWorld.z) + 0.04f;
             Vector3 cupLocal = new Vector3(greenP.x, greenSurfaceY - T.position.y + 0.03f, greenP.y);
             BuildPin(T, cupLocal);
 
             ScatterTrees(T, hole, center, roughHalf);
 
             Vector3 teeWorld = T.TransformPoint(new Vector3(teeP.x, 0f, teeP.y));
-            float teeSurfaceY = SurfaceGroundY(teeWorld.x, teeWorld.z) + 0.05f;
+            float teeSurfaceY = SurfaceGroundY(teeWorld.x, teeWorld.z) + 0.04f;
             return new HoleViz
             {
                 Green = greenObj.transform,
@@ -402,7 +402,7 @@ namespace Greenkeeper.Unity.Play
         {
             if (_game.Course.Get(zoneId) == null) return;
             float br = 1.4f + 0.8f * (float)new System.Random(seed).NextDouble();
-            BuildBlob(parent, zoneId, "Bunker", p, ProcMesh.EllipseRadii(br, br * 0.8f, 16, 0.18f, seed, 0f), -0.05f, new Color(0.82f, 0.74f, 0.55f));
+            BuildBlob(parent, zoneId, "Bunker", p, ProcMesh.EllipseRadii(br, br * 0.8f, 24, 0.16f, seed, 0f), -0.04f, new Color(0.82f, 0.74f, 0.55f));
         }
 
         /// <summary>A rounded blob surface (green/tee/approach/bunker) centred at a local XZ point.</summary>
