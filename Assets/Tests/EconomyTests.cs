@@ -32,16 +32,16 @@ namespace Greenkeeper.Tests
         }
 
         [Test]
-        public void GoodManagement_IsProfitable_Mismanagement_BleedsCash()
+        public void FullYearFromSpring_GoodProfits_AndNeverGoesRed_WhileNeglectSinks()
         {
             double start = EconomyConfig.Default.StartingCash;
-            double goodCash = RunSeasonCash(PlanGood);
-            double badCash = RunSeasonCash(PlanNeglect);
+            var good = RunYear(PlanGood);   // (endCash, minCash) over a full year from a SPRING start
+            var bad = RunYear(_ => new DayPlan());
 
-            TestContext.WriteLine($"start ${start:N0} -> end cash — good: ${goodCash:N0}  neglect: ${badCash:N0}");
-            Assert.Greater(goodCash, start, "a well-run season must end in net PROFIT");
-            Assert.Less(badCash, start, "a do-nothing season must end in net LOSS (fixed costs drain regardless)");
-            Assert.Less(badCash, 0.0, "doing nothing for a season should bury you in the red, not merely earn less");
+            TestContext.WriteLine($"start ${start:N0} | GOOD end ${good.end:N0} (min ${good.min:N0}) | NEGLECT end ${bad.end:N0}");
+            Assert.Greater(good.end, start, "a well-run year must end in net PROFIT");
+            Assert.Greater(good.min, 0.0, "smart play must never go into the red — even through the spring ramp");
+            Assert.Less(bad.end, 0.0, "a do-nothing year must sink the course (fixed costs drain regardless)");
         }
 
         [Test]
@@ -76,7 +76,7 @@ namespace Greenkeeper.Tests
 
         // ---- helpers ----
 
-        private static double RunSeasonCash(System.Func<CourseState, DayPlan> planFn)
+        private static (double end, double min) RunYear(System.Func<CourseState, DayPlan> planFn)
         {
             var cfg = CourseConfig.GreensOnly();
             var course = CourseFactory.Build(cfg, 7);
@@ -85,9 +85,14 @@ namespace Greenkeeper.Tests
                 Economy = new EconomyState(E),
                 EconomyConfig = E,
             };
-            dir.Clock.JumpTo(90); // summer
-            for (int d = 0; d < 90; d++) dir.ResolveDay(planFn(course));
-            return dir.Economy.Cash;
+            // Spring start (day 0) — the real player path, not a summer cherry-pick.
+            double min = dir.Economy.Cash;
+            for (int d = 0; d < 360; d++)
+            {
+                dir.ResolveDay(planFn(course));
+                if (dir.Economy.Cash < min) min = dir.Economy.Cash;
+            }
+            return (dir.Economy.Cash, min);
         }
 
         private static DayPlan PlanGood(CourseState course)

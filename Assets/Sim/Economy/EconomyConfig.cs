@@ -11,8 +11,8 @@ namespace Greenkeeper.Sim.Economy
         public static readonly EconomyConfig Default = new EconomyConfig();
 
         // ---- Bank ----
-        public double StartingCash = 50000.0;
-        public double StartingReputation = 60.0; // 0..100, slow-moving
+        public double StartingCash = 100000.0;     // a season's operating buffer to ramp through spring
+        public double StartingReputation = 65.0;   // 0..100, slow-moving
 
         // ---- Demand -> revenue ----
         public double GreenFee = 55.0;
@@ -31,24 +31,26 @@ namespace Greenkeeper.Sim.Economy
         public double HeavyRainMm = 8.0;
 
         // ---- FIXED costs (TDD §4.6): these drain EVERY day regardless of activity. Doing nothing does
-        //      not stop the bills — a do-nothing quarter must trend toward loss. All tunable. ----
-        public double CrewWagesPerDay = 1500.0;     // the maintenance crew is on payroll whether or not you assign them
-        public double DebtServicePerDay = 1200.0;   // mortgage / lease on the property
-        public double AdminClubhousePerDay = 900.0; // clubhouse + admin staff
-        public double UtilitiesPerDay = 600.0;      // water + power base load
-        public double EquipmentLeasePerDay = 500.0; // mowers/sprayers depreciation + lease
-        public double PropertyTaxPerDay = 250.0;
-        public double InsurancePerDay = 200.0;
+        //      not stop the bills — a do-nothing quarter trends to loss. Sized so a well-run course is
+        //      ~break-even in the shoulder seasons and profitable in summer (not so high that perfect
+        //      play loses money in spring). All tunable. ----
+        public double CrewWagesPerDay = 1000.0;     // the maintenance crew is on payroll whether or not you assign them
+        public double DebtServicePerDay = 700.0;    // mortgage / lease on the property
+        public double AdminClubhousePerDay = 500.0; // clubhouse + admin staff
+        public double UtilitiesPerDay = 400.0;      // water + power base load
+        public double EquipmentLeasePerDay = 350.0; // mowers/sprayers depreciation + lease
+        public double PropertyTaxPerDay = 150.0;
+        public double InsurancePerDay = 100.0;
 
-        /// <summary>Total fixed cost that accrues every day no matter what (≈ $5,150/day at defaults).</summary>
+        /// <summary>Total fixed cost that accrues every day no matter what (≈ $3,200/day at defaults).</summary>
         public double FixedDailyCost()
             => CrewWagesPerDay + DebtServicePerDay + AdminClubhousePerDay + UtilitiesPerDay
              + EquipmentLeasePerDay + PropertyTaxPerDay + InsurancePerDay;
 
         // ---- VARIABLE costs (materials/inputs) — only when you actually do the work ----
-        public double SprayCost = 60.0;        // per zone sprayed (fungicide)
-        public double FertCostPerN = 4.0;      // per unit of nitrogen applied
-        public double WaterCostPerMm = 1.5;    // per mm irrigation per zone
+        public double SprayCost = 40.0;        // per zone sprayed (fungicide)
+        public double FertCostPerN = 2.5;      // per unit of nitrogen applied
+        public double WaterCostPerMm = 1.0;    // per mm irrigation per zone
         public double MowCost = 5.0;           // per zone mown
         public double RollCost = 4.0;          // per zone rolled
         public double AerateCost = 40.0;       // per zone aerated

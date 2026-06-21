@@ -84,9 +84,9 @@ namespace Greenkeeper.Sim.Economy
             switch (season)
             {
                 case Season.Summer: return 1.0;
-                case Season.Spring: return 0.7;
-                case Season.Fall: return 0.7;
-                default: return 0.3; // winter
+                case Season.Spring: return 0.85;
+                case Season.Fall: return 0.85;
+                default: return 0.40; // winter — quiet, but the bills still come
             }
         }
     }

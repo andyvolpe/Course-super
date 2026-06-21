@@ -82,26 +82,25 @@ class Program
     // vs neglected, so the consequence is money, not just a brown green.
     static void EconomyConsequence()
     {
-        Console.WriteLine("ECONOMY — condition -> rounds -> revenue (so neglect costs cash)\n");
-        Console.WriteLine("  day | GOOD cond  cash        | NEGLECT cond  cash");
-        Console.WriteLine("  ----+------------------------+---------------------");
+        Console.WriteLine("ECONOMY — full year from a SPRING start (the real player path)\n");
+        Console.WriteLine("  day  season | GOOD cond  cash        | NEGLECT cond  cash");
+        Console.WriteLine("  -----+------+------------------------+---------------------");
 
         var (gDir, gCourse) = NewEcoRun();
         var (nDir, nCourse) = NewEcoRun();
-        for (int d = 0; d < 90; d++)
+        for (int d = 0; d < 360; d++)
         {
             gDir.ResolveDay(EcoGoodPlan(gCourse));
             nDir.ResolveDay(new DayPlan()); // neglect: keep the lights on, do nothing
-            if (d % 15 == 14 || d == 0)
+            if (d == 14 || d % 30 == 29)
             {
                 var gl = gDir.Economy.Latest; var nl = nDir.Economy.Latest;
-                Console.WriteLine($"  {d + 1,3} | {gl.ConditionIndex,6:F0}   ${gl.Cash,10:N0} | {nl.ConditionIndex,6:F0}     ${nl.Cash,10:N0}");
+                Console.WriteLine($"  {d + 1,4} {gDir.Clock.Season,-6} | {gl.ConditionIndex,6:F0} ${gl.Cash,11:N0} | {nl.ConditionIndex,6:F0} ${nl.Cash,11:N0}");
             }
         }
         double good = gDir.Economy.Cash, bad = nDir.Economy.Cash;
-        Console.WriteLine($"\n  End of summer: well-run ${good:N0}  vs  neglected ${bad:N0}  " +
-                          $"(neglect left ${good - bad:N0} on the table).");
-        Console.WriteLine($"  -> the green still has to pay — condition is revenue, and the bill comes either way.");
+        Console.WriteLine($"\n  End of YEAR: well-run ${good:N0}  vs  neglected ${bad:N0}.");
+        Console.WriteLine($"  -> smart play should survive the spring ramp and profit on the year; neglect should sink.");
     }
 
     static (GameDirector, CourseState) NewEcoRun()
@@ -113,7 +112,7 @@ class Program
             Economy = new EconomyState(EconomyConfig.Default),
             EconomyConfig = EconomyConfig.Default,
         };
-        dir.Clock.JumpTo(90);
+        // Spring start (day 0) — what the player actually faces.
         return (dir, course);
     }
 

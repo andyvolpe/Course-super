@@ -110,13 +110,16 @@ Makes mismanagement *cost* money, not just looks. Pure, deterministic, opt-in (`
   → revenue; minus the day's costs (overhead + materials from the plan). Reputation is a slow EMA of
   condition, so standing is earned and lost over time, not snapped.
 - **Fixed costs accrue every day regardless of activity** (`EconomyConfig.FixedDailyCost()` ≈
-  $5,150/day: crew wages, debt service, admin/clubhouse, utilities, equipment lease, property tax,
+  $3,200/day: crew wages, debt service, admin/clubhouse, utilities, equipment lease, property tax,
   insurance). Variable costs (materials) only when you do the work.
 - **Condition → demand is gated by a floor + steep curve**: below `DemandFloorCondition` (25) the tee
-  sheet empties; above it, `((cond-floor)/(100-floor))^2.2`.
-- Headless trajectory (`Greenkeeper.FeelTest`): a well-run summer ends ≈ +$225k; **a do-nothing
-  summer ends ≈ −$230k** — condition slides (88→6), rounds dry up, fixed costs keep draining, cash
-  goes negative around day 45. The death spiral spirals. (Locked by an EditMode test.)
+  sheet empties; above it, `((cond-floor)/(100-floor))^2.2`. Season demand: summer 1.0, spring/fall
+  0.85, winter 0.40.
+- **Balanced against the real player path (a SPRING start, $100k buffer):** smart play dips modestly
+  through the cold spring ramp but never goes into the red, then profits — a full year ends ≈ +$350k
+  to +$400k. A do-nothing year sinks to ≈ −$560k (condition collapses in summer, fixed costs keep
+  draining). The gap is the game. Locked by an EditMode test that runs a full year from spring and
+  asserts: good profits AND never goes red; neglect ends negative.
 
 ## Phase 7 — the tournament rung (`Assets/Sim/Tournament`)
 
