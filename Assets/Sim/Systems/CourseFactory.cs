@@ -58,6 +58,8 @@ namespace Greenkeeper.Sim.Systems
                     GddAccum = 0.0,
                     GrainPct = t.GrainStartPct,
                     MowHeightIn = profile.MowHeightIn,
+                    GrassHeightIn = profile.MowHeightIn, // freshly cut
+
                     SprayResidualDaysLeft = 0,
                     DaysSinceAeration = 0,
                     AerationRecoveryDaysLeft = 0,

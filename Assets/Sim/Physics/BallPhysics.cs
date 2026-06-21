@@ -78,17 +78,26 @@ namespace Greenkeeper.Sim.Physics
                 case ZoneType.Tee:
                 {
                     double firmNorm = Mathx.Clamp01(surface.FirmnessPct / 100.0);
-                    r.RollOutFt = firmNorm * t.FairwayRollOutMaxFt;  // firm runs out, soft holds
-                    r.Quality = firmNorm > 0.6 ? "clean, firm (runs out)" : "clean, receptive";
+                    // Un-mown fairway grass kills roll and grabs the club a little.
+                    double cut = surface.Surface != null ? surface.Surface.MowHeightIn : surface.MowHeightIn;
+                    double overgrow = Mathx.Clamp01(Mathx.Max0(surface.GrassHeightIn - cut) / t.FairwayLongGrassRangeIn);
+                    r.RollOutFt = firmNorm * t.FairwayRollOutMaxFt * (1.0 - overgrow);
+                    r.DistanceFactor = 1.0 - 0.25 * overgrow;
+                    r.Quality = overgrow > 0.5 ? "shaggy lie (needs mowing)"
+                              : firmNorm > 0.6 ? "clean, firm (runs out)" : "clean, receptive";
                     break;
                 }
                 case ZoneType.Rough:
                 {
-                    double densNorm = Mathx.Clamp01(surface.DensityPct / 100.0); // denser/taller = worse lie
-                    r.DistanceFactor = Mathx.Clamp(1.0 - t.RoughDistancePenalty * densNorm, 0.0, 1.0);
-                    r.Buried = densNorm >= t.RoughBuriedDensity;
-                    r.Flier = !r.Buried && densNorm >= t.RoughFlierDensityMin;
-                    r.Quality = r.Buried ? "buried in rough" : (r.Flier ? "flier lie" : "light rough");
+                    double densNorm = Mathx.Clamp01(surface.DensityPct / 100.0);
+                    // Length is the real story in rough: a fun challenge, then unplayable when it gets deep.
+                    double cut = surface.Surface != null ? surface.Surface.MowHeightIn : 2.5;
+                    double lenNorm = Mathx.Clamp01(Mathx.Max0(surface.GrassHeightIn - cut) / t.RoughChallengeRangeIn);
+                    double severity = System.Math.Max(densNorm * t.RoughDistancePenalty, lenNorm);
+                    r.DistanceFactor = Mathx.Clamp(1.0 - severity, 0.15, 1.0); // floor: you can always hack it out
+                    r.Buried = lenNorm >= 0.95 || densNorm >= t.RoughBuriedDensity; // deep rough = buried/unplayable
+                    r.Flier = !r.Buried && (lenNorm >= 0.4 || densNorm >= t.RoughFlierDensityMin);
+                    r.Quality = r.Buried ? "buried — barely playable" : (r.Flier ? "flier lie" : "light rough");
                     break;
                 }
                 case ZoneType.Bunker:

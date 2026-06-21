@@ -43,6 +43,7 @@ namespace Greenkeeper.Sim.Systems
             if (action.Mow)
             {
                 z.MowHeightIn = action.MowHeightIn;
+                z.GrassHeightIn = action.MowHeightIn; // cut resets the actual blade length to the set height
                 z.GrainPct = Mathx.Max0(z.GrainPct - t.GrainMowReduction * q); // cleaner cut = more grain knocked down
                 z.DensityPct = Mathx.Max0(z.DensityPct - t.MowDensityWear);    // wear is not a benefit; unscaled
                 z.ClipVolume = 0.0; // harvested

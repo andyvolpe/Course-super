@@ -24,7 +24,7 @@ namespace Greenkeeper.Sim.Math
             double densityNorm = Mathx.Clamp01(z.DensityPct / 100.0);
             double grainNorm = Mathx.Clamp01(z.GrainPct / 100.0);
             double debtNorm = Mathx.Clamp01(z.TurfDebtPct / 100.0);
-            double heightFactor = Mathx.InverseLerp(0.08, 0.30, z.MowHeightIn); // tighter cut = faster
+            double heightFactor = Mathx.InverseLerp(0.08, 0.30, z.GrassHeightIn); // ACTUAL length: unmown = slower
 
             double stimp = t.StimpBase
                 + t.StimpDensityBonus * densityNorm

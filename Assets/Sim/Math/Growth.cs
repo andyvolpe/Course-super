@@ -32,6 +32,13 @@ namespace Greenkeeper.Sim.Math
             // Clip yield scales with how much canopy there is to cut.
             z.ClipVolume = growth * (z.DensityPct / 100.0) * t.ClipPerGrowth;
 
+            // Blade ELONGATION uses a shoot-growth rate driven by the temperature BELL (not raw GDD):
+            // it peaks at the cool-season optimum and falls off in both summer heat and winter cold, so
+            // grass climbs fast in spring/fall and slows in summer/winter. Mowing resets it (MaintenanceSystem).
+            double shoot = t.ShootGrowthMaxIn * tempFactor * moistureFactor * nFactor
+                         * grass.RecuperativeRate * surfaceRecup;
+            z.GrassHeightIn = Mathx.Clamp(z.GrassHeightIn + shoot, 0.0, t.MaxGrassHeightIn);
+
             // Carbohydrate reserves: photosynthesis credits, respiration + growth debits.
             double photo = t.PhotosynthesisMax * tempFactor * (z.DensityPct / 100.0);
             double heatBurn = t.HeatRespirationPerDegOverF * Mathx.Max0(w.TmeanF - t.GrowthTempCenterF);

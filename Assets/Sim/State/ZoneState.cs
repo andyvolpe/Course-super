@@ -49,7 +49,8 @@ namespace Greenkeeper.Sim.State
         public double SandQualityPct;    // sand consistency 0..100 — clean firm vs settled/washed (lie quality)
 
         // ---- Maintenance bookkeeping ----
-        public double MowHeightIn = 0.125; // current height of cut
+        public double MowHeightIn = 0.125; // current height of cut (the target you set when mowing)
+        public double GrassHeightIn = 0.125; // ACTUAL blade length: grows daily, reset to the cut on a mow
         public int SprayResidualDaysLeft;
         public int DaysSinceAeration;
         public int AerationRecoveryDaysLeft;
@@ -106,6 +107,7 @@ namespace Greenkeeper.Sim.State
             into.Add(Stimp);
             into.Add(SandQualityPct);
             into.Add(MowHeightIn);
+            into.Add(GrassHeightIn);
             into.Add(SprayResidualDaysLeft);
             into.Add(DaysSinceAeration);
             into.Add(AerationRecoveryDaysLeft);

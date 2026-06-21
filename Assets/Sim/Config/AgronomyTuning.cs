@@ -268,6 +268,17 @@ namespace Greenkeeper.Sim.Config
         public double SandRakeRestore = 60.0;       // a rake restores this much consistency
         public double BunkerWashoutRainMm = 18.0;   // a storm this big washes the bunker out (needs raking)
 
+        // ---- Grass length (grows when unmown; mowing resets it to the cut height) ----
+        // Blade ELONGATION is its own shoot-growth rate driven by the temperature bell (peaks at the
+        // cool-season optimum ~65F, falls off in BOTH summer heat and winter cold) — unlike total GDD,
+        // which keeps climbing with heat. So vertical growth is fastest in the growing seasons (spring/
+        // fall) and slows in summer/winter, scaled by moisture and nitrogen. Mowing resets GrassHeightIn.
+        public double ShootGrowthMaxIn = 0.16; // max daily blade elongation at the cool-season optimum
+        public double MaxGrassHeightIn = 14.0;
+        // Play impacts of un-mown length (over the surface's cut height):
+        public double FairwayLongGrassRangeIn = 1.6;  // overgrowth that fully kills fairway roll-out
+        public double RoughChallengeRangeIn = 3.5;    // overgrowth band above the rough cut before it's unplayable
+
         // ---- Surface → LIE model (TDD §7): the miss is penalised by the surface YOU maintain ----
         public double FairwayRollOutMaxFt = 32.0;   // a firm fairway runs the ball out this far
         public double RoughDistancePenalty = 0.55;  // fraction of distance the rough eats at full density
