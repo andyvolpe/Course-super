@@ -28,6 +28,7 @@ namespace Greenkeeper.Unity.Play
         public float cellSizeM = 2.0f;
 
         private GameManager _game;
+        private Terrain _terrain;          // Unity Terrain ground (null => mesh-ground fallback)
         private GameObject[] _treePrefabs; // real tree models from Resources/Trees/* (+ Resources/PolyHaven/Tree)
         private Material _trunkMat;        // shared so hundreds of trees don't spawn thousands of materials
         private Material[] _canopyMats;
@@ -60,17 +61,18 @@ namespace Greenkeeper.Unity.Play
             {
                 Debug.Log("[Bootstrap] building scene…");
                 BuildLighting();
-                BuildGround();
-                _game = BuildGameManager();
-                if (_game == null || _game.Course == null) { _error = "GameManager/course failed to build."; return; }
 
-                // Real tree models: drop a CC0 pack into Assets/Resources/Trees/ and they're scattered.
+                // Real tree models: drop a CC0 pack into Assets/Resources/Trees/ and they're used.
                 var trees = new List<GameObject>();
                 var folder = Resources.LoadAll<GameObject>("Trees");
                 if (folder != null) trees.AddRange(folder);
                 var ph = Resources.Load<GameObject>("PolyHaven/Tree");
                 if (ph != null) trees.Add(ph);
                 _treePrefabs = trees.ToArray();
+
+                BuildGround(); // Unity Terrain (heightmap + splat + terrain trees), or mesh-ground fallback
+                _game = BuildGameManager();
+                if (_game == null || _game.Course == null) { _error = "GameManager/course failed to build."; return; }
 
                 var holesViz = new List<HoleViz>();
                 int holes = Mathf.Max(1, holesToRender);
@@ -87,10 +89,13 @@ namespace Greenkeeper.Unity.Play
                     float x = (back ? (cols - 1 - col) : col) * laneW;
                     float z = row * rowD;
                     float yaw = back ? 180f : 0f;          // back rows point -Z
-                    var hv = BuildHole(hole, new Vector3(x, GroundY(x, z), z), yaw);
+                    var hv = BuildHole(hole, new Vector3(x, SurfaceGroundY(x, z), z), yaw);
                     if (hv != null) holesViz.Add(hv);
                 }
-                BuildPerimeterTrees(maxXForTrees: (6 - 1) * 30f, maxZForTrees: ((holes + 5) / 6 - 1) * 64f + 50f);
+                // Perimeter forest: Terrain tree instances handle it when a pack is imported; otherwise
+                // (mesh ground, or terrain but no tree models) scatter our own so it's never barren.
+                if (_terrain == null || _treePrefabs == null || _treePrefabs.Length == 0)
+                    BuildPerimeterTrees(maxXForTrees: (6 - 1) * 30f, maxZForTrees: ((holes + 5) / 6 - 1) * 64f + 50f);
 
                 var (player, cam) = BuildPlayer();
                 BuildBallAndCup(player, holesViz);
@@ -134,14 +139,9 @@ namespace Greenkeeper.Unity.Play
 
         private void BuildGround()
         {
-            int rows = Mathf.CeilToInt(Mathf.Max(1, holesToRender) / 6f);
-            float maxX = (6 - 1) * 30f, maxZ = (rows - 1) * 64f + 50f;
-            var mesh = ProcMesh.HeightGrid(-40f, -40f, maxX + 40f, maxZ + 40f, 4f, GroundY, 6f); // UV tiles ~6 m
-            var ground = new GameObject("Ground");
-            ground.AddComponent<MeshFilter>().sharedMesh = mesh;
-            // Mesh UVs carry the tiling, so use the shared material directly (no extra scale).
-            ground.AddComponent<MeshRenderer>().sharedMaterial = SharedSurfaceMaterial("Ground", new Color(0.20f, 0.30f, 0.13f));
-            ground.AddComponent<MeshCollider>().sharedMesh = mesh; // walkable rolling terrain
+            try { _terrain = BuildTerrain(); }
+            catch (System.Exception e) { Debug.LogWarning("[Bootstrap] Terrain build failed, using mesh ground: " + e.Message); _terrain = null; }
+            if (_terrain == null) BuildMeshGround();
         }
 
         /// <summary>Rolling site elevation (metres) at a world XZ — broad hills + a little finer relief.</summary>
@@ -150,6 +150,140 @@ namespace Greenkeeper.Unity.Play
             float broad = Mathf.PerlinNoise(x * 0.012f + 11.3f, z * 0.012f + 7.1f) - 0.5f;   // ±0.5
             float fine = Mathf.PerlinNoise(x * 0.05f + 31.7f, z * 0.05f + 19.2f) - 0.5f;     // ±0.5
             return broad * 11f + fine * 1.6f; // ~±6 m of roll
+        }
+
+        /// <summary>Height the SURFACES drape onto — the live Terrain if present, else the GroundY function.</summary>
+        private float SurfaceGroundY(float x, float z)
+            => _terrain != null ? _terrain.SampleHeight(new Vector3(x, 0f, z)) + _terrain.transform.position.y : GroundY(x, z);
+
+        // ---- Unity Terrain ----
+
+        private void BuildBounds(out float minX, out float minZ, out float width, out float length)
+        {
+            int rows = Mathf.CeilToInt(Mathf.Max(1, holesToRender) / 6f);
+            minX = -40f; minZ = -40f;
+            width = (6 - 1) * 30f + 80f;
+            length = (rows - 1) * 64f + 50f + 80f;
+        }
+
+        /// <summary>
+        /// Build a real Unity Terrain: heightmap from GroundY, 3 splat layers blended by noise (so the
+        /// grass isn't an obvious repeating tile), a TerrainCollider, and terrain trees from the imported
+        /// pack massed at the edges. Returns null on any failure so BuildGround can fall back to a mesh.
+        /// </summary>
+        private Terrain BuildTerrain()
+        {
+            BuildBounds(out float minX, out float minZ, out float width, out float length);
+            const float minY = -10f, sizeY = 20f;
+
+            var data = new TerrainData { heightmapResolution = 257 };
+            data.size = new Vector3(width, sizeY, length);
+
+            // Heights (heights[y,x]; y runs along Z/length, x along width).
+            int hr = data.heightmapResolution;
+            var heights = new float[hr, hr];
+            for (int y = 0; y < hr; y++)
+                for (int x = 0; x < hr; x++)
+                {
+                    float wx = minX + width * x / (hr - 1);
+                    float wz = minZ + length * y / (hr - 1);
+                    heights[y, x] = Mathf.Clamp01((GroundY(wx, wz) - minY) / sizeY);
+                }
+            data.SetHeights(0, 0, heights);
+
+            // Splat layers: rough grass (base), fairway grass (patches), dirt (rare) — blended by noise.
+            data.terrainLayers = new[]
+            {
+                Layer("Rough", new Color(0.20f, 0.31f, 0.13f), 9f),
+                Layer("Fairway", new Color(0.24f, 0.44f, 0.18f), 7f),
+                Layer("Ground", new Color(0.33f, 0.27f, 0.16f), 6f),
+            };
+            int ar = 256; data.alphamapResolution = ar;
+            var alpha = new float[ar, ar, 3];
+            for (int y = 0; y < ar; y++)
+                for (int x = 0; x < ar; x++)
+                {
+                    float wx = minX + width * x / (ar - 1);
+                    float wz = minZ + length * y / (ar - 1);
+                    float fair = Mathf.SmoothStep(0f, 1f, (Mathf.PerlinNoise(wx * 0.03f + 4f, wz * 0.03f + 9f) - 0.52f) * 5f);
+                    float dirt = Mathf.SmoothStep(0f, 1f, (Mathf.PerlinNoise(wx * 0.10f + 40f, wz * 0.10f + 70f) - 0.70f) * 6f);
+                    float rough = 1f;
+                    float sum = rough + fair + dirt;
+                    alpha[y, x, 0] = rough / sum;
+                    alpha[y, x, 1] = fair / sum;
+                    alpha[y, x, 2] = dirt / sum;
+                }
+            data.SetAlphamaps(0, 0, alpha);
+
+            var go = Terrain.CreateTerrainGameObject(data);
+            go.name = "Terrain";
+            go.transform.position = new Vector3(minX, minY, minZ);
+            var terrain = go.GetComponent<Terrain>(); // keep the pipeline's default terrain material
+
+            PlaceTerrainTrees(terrain, data, minX, minZ, width, length);
+            return terrain;
+        }
+
+        private TerrainLayer Layer(string key, Color fallback, float tileSize)
+        {
+            var l = new TerrainLayer { diffuseTexture = TexOrColor(key, fallback), tileSize = new Vector2(tileSize, tileSize) };
+            return l;
+        }
+
+        /// <summary>Massed perimeter trees as efficient Terrain tree instances (skips the interior holes).</summary>
+        private void PlaceTerrainTrees(Terrain terrain, TerrainData data, float minX, float minZ, float width, float length)
+        {
+            if (_treePrefabs == null || _treePrefabs.Length == 0) return;
+            var protos = new TreePrototype[_treePrefabs.Length];
+            for (int i = 0; i < _treePrefabs.Length; i++) protos[i] = new TreePrototype { prefab = _treePrefabs[i] };
+            data.treePrototypes = protos;
+
+            var rnd = new System.Random(909);
+            var list = new List<TreeInstance>();
+            for (int i = 0; i < 900; i++)
+            {
+                float nx = (float)rnd.NextDouble(), nz = (float)rnd.NextDouble();
+                float edge = Mathf.Min(Mathf.Min(nx, 1f - nx), Mathf.Min(nz, 1f - nz));
+                if (edge > 0.16f && rnd.NextDouble() < 0.82) continue; // dense at the edges, sparse inside
+                list.Add(new TreeInstance
+                {
+                    position = new Vector3(nx, 0f, nz),         // normalised over the terrain
+                    prototypeIndex = rnd.Next(protos.Length),
+                    widthScale = 0.85f + 0.6f * (float)rnd.NextDouble(),
+                    heightScale = 0.85f + 0.6f * (float)rnd.NextDouble(),
+                    rotation = (float)rnd.NextDouble() * 6.283f,
+                    color = Color.white,
+                    lightmapColor = Color.white,
+                });
+            }
+            terrain.terrainData.SetTreeInstances(list.ToArray(), true);
+        }
+
+        private static Texture2D TexOrColor(string key, Color fallback)
+        {
+            var m = LoadSurfaceMaterial(key);
+            Texture t = m != null ? (m.HasProperty("_BaseMap") ? m.GetTexture("_BaseMap") : m.mainTexture) : null;
+            return t as Texture2D ?? SolidTex(fallback);
+        }
+
+        private static Texture2D SolidTex(Color c)
+        {
+            var t = new Texture2D(4, 4);
+            var px = new Color[16];
+            for (int i = 0; i < px.Length; i++) px[i] = c;
+            t.SetPixels(px); t.Apply();
+            return t;
+        }
+
+        /// <summary>Fallback ground when Terrain isn't available: the rolling height mesh.</summary>
+        private void BuildMeshGround()
+        {
+            BuildBounds(out float minX, out float minZ, out float width, out float length);
+            var mesh = ProcMesh.HeightGrid(minX, minZ, minX + width, minZ + length, 4f, GroundY, 6f);
+            var ground = new GameObject("Ground");
+            ground.AddComponent<MeshFilter>().sharedMesh = mesh;
+            ground.AddComponent<MeshRenderer>().sharedMaterial = SharedSurfaceMaterial("Ground", new Color(0.20f, 0.30f, 0.13f));
+            ground.AddComponent<MeshCollider>().sharedMesh = mesh;
         }
 
         private GameManager BuildGameManager()
@@ -242,14 +376,14 @@ namespace Greenkeeper.Unity.Play
 
             // Pin + cup sit on the green surface.
             Vector3 greenWorld = T.TransformPoint(new Vector3(greenP.x, 0f, greenP.y));
-            float greenSurfaceY = GroundY(greenWorld.x, greenWorld.z) + 0.06f;
+            float greenSurfaceY = SurfaceGroundY(greenWorld.x, greenWorld.z) + 0.06f;
             Vector3 cupLocal = new Vector3(greenP.x, greenSurfaceY - T.position.y + 0.03f, greenP.y);
             BuildPin(T, cupLocal);
 
             ScatterTrees(T, hole, center, roughHalf);
 
             Vector3 teeWorld = T.TransformPoint(new Vector3(teeP.x, 0f, teeP.y));
-            float teeSurfaceY = GroundY(teeWorld.x, teeWorld.z) + 0.05f;
+            float teeSurfaceY = SurfaceGroundY(teeWorld.x, teeWorld.z) + 0.05f;
             return new HoleViz
             {
                 Green = greenObj.transform,
@@ -303,7 +437,7 @@ namespace Greenkeeper.Unity.Play
             for (int i = 0; i < verts.Length; i++)
             {
                 Vector3 world = root.TransformPoint(localPos + new Vector3(verts[i].x, 0f, verts[i].z));
-                verts[i].y = GroundY(world.x, world.z) + lift - rootY - localPos.y;
+                verts[i].y = SurfaceGroundY(world.x, world.z) + lift - rootY - localPos.y;
             }
             mesh.vertices = verts;
             mesh.RecalculateNormals();
@@ -348,6 +482,9 @@ namespace Greenkeeper.Unity.Play
 
         private void ScatterTrees(Transform parent, int hole, List<Vector2> center, float[] roughHalf)
         {
+            // The Terrain places efficient tree instances when a model pack is imported; only scatter our
+            // own GameObjects on the mesh fallback OR when no tree prefab exists (so it's never barren).
+            if (_terrain != null && _treePrefabs != null && _treePrefabs.Length > 0) return;
             var rnd = new System.Random(hole * 2237 + 5);
             int m = center.Count;
             for (int i = 1; i < m; i += 2)
@@ -359,7 +496,7 @@ namespace Greenkeeper.Unity.Play
                     float off = roughHalf[i] + 1.5f + 4f * (float)rnd.NextDouble();
                     Vector2 lp = center[i] + perp * off * s;
                     Vector3 world = parent.TransformPoint(new Vector3(lp.x, 0f, lp.y));
-                    PlaceTree(parent, new Vector3(lp.x, GroundY(world.x, world.z) - parent.position.y, lp.y), rnd);
+                    PlaceTree(parent, new Vector3(lp.x, SurfaceGroundY(world.x, world.z) - parent.position.y, lp.y), rnd);
                 }
             }
         }
@@ -377,7 +514,7 @@ namespace Greenkeeper.Unity.Play
                 float edge = Mathf.Min(Mathf.Min(x + 34f, maxXForTrees + 34f - x), Mathf.Min(z + 34f, maxZForTrees + 34f - z));
                 bool nearEdge = edge < 28f;
                 if (!nearEdge && rnd.NextDouble() < 0.78) continue; // sparse inside, dense at edges
-                PlaceTree(grove, new Vector3(x, GroundY(x, z), z), rnd);
+                PlaceTree(grove, new Vector3(x, SurfaceGroundY(x, z), z), rnd);
             }
         }
 
@@ -435,7 +572,7 @@ namespace Greenkeeper.Unity.Play
         private (GameObject player, Camera cam) BuildPlayer()
         {
             var player = new GameObject("Player");
-            player.transform.position = new Vector3(0f, GroundY(0f, 0f) + 1.3f, 0f); // stand on hole-1 tee
+            player.transform.position = new Vector3(0f, SurfaceGroundY(0f, 0f) + 1.3f, 0f); // stand on hole-1 tee
             var cc = player.AddComponent<CharacterController>();
             cc.height = 1.8f; cc.radius = 0.3f; cc.center = new Vector3(0, 0.9f, 0);
 

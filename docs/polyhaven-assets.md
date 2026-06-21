@@ -88,6 +88,18 @@ To get real 3D trees, import a CC0 low-poly nature pack and drop the tree prefab
 Make each a prefab (drag the model into a scene, then back into the Project), move it into
 `Resources/Trees/`, and press Play. Several different prefabs → varied forest.
 
+## The ground is now Unity Terrain
+
+The play test builds a real **Unity Terrain** at runtime: a heightmap (rolling hills), **three
+splat-blended texture layers** (rough / fairway / dirt mixed by noise, so it doesn't read as one
+repeating tile), a TerrainCollider you walk on, and efficient **Terrain tree instances** from your
+imported pack. The maintained surfaces (greens/fairways/tees/bunkers) still sit on top as the
+sim-driven meshes. The splat layers pull their textures from your `Resources/PolyHaven/Rough`,
+`Fairway`, and `Ground` materials if present (else flat colours), so importing those improves the
+ground automatically. If Terrain creation fails for any reason it falls back to the old mesh ground.
+
+Still a follow-up: **detail (geometry) grass** on the Terrain — ask and I'll add a grass detail layer.
+
 ## Grass that doesn't look obviously tiled
 
 The surfaces sample a tiling texture, so a single repeating texture reads as a grid. Mitigations now
