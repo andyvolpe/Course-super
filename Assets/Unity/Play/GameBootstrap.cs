@@ -100,8 +100,9 @@ namespace Greenkeeper.Unity.Play
                 if (_terrain == null || _treePrefabs == null || _treePrefabs.Length == 0)
                     BuildPerimeterTrees(maxXForTrees: (6 - 1) * 30f, maxZForTrees: ((holes + 5) / 6 - 1) * 64f + 50f);
 
-                // Real geometry grass across the rough + surrounds (after holes so the mask is filled).
-                if (_terrain != null) ApplyGrassDetail(_terrain);
+                // Real geometry grass + terrain trees across the rough + surrounds (after holes so the
+                // mask is filled — trees/grass avoid the greens/fairways/tees/bunkers).
+                if (_terrain != null) { PlaceTerrainTrees(_terrain); ApplyGrassDetail(_terrain); }
 
                 var (player, cam) = BuildPlayer();
                 BuildBallAndCup(player, holesViz);
@@ -227,9 +228,7 @@ namespace Greenkeeper.Unity.Play
             go.name = "Terrain";
             go.transform.position = new Vector3(minX, minY, minZ);
             var terrain = go.GetComponent<Terrain>(); // keep the pipeline's default terrain material
-
-            PlaceTerrainTrees(terrain, data, minX, minZ, width, length);
-            return terrain;
+            return terrain; // trees + grass are placed AFTER the holes (so they can avoid the surfaces)
         }
 
         private TerrainLayer Layer(string key, Color fallback, float tileSize)
@@ -240,21 +239,26 @@ namespace Greenkeeper.Unity.Play
             return new TerrainLayer { diffuseTexture = TexOrColor(key, fallback), tileSize = new Vector2(tileSize, tileSize) };
         }
 
-        /// <summary>Massed perimeter trees as efficient Terrain tree instances (skips the interior holes).</summary>
-        private void PlaceTerrainTrees(Terrain terrain, TerrainData data, float minX, float minZ, float width, float length)
+        /// <summary>Terrain tree instances massed at the edges/between holes — kept OFF every maintained
+        /// surface via the grass mask (with a margin), so no trunk grows on a green/fairway/tee/bunker.</summary>
+        private void PlaceTerrainTrees(Terrain terrain)
         {
             if (_treePrefabs == null || _treePrefabs.Length == 0) return;
+            var data = terrain.terrainData;
             var protos = new TreePrototype[_treePrefabs.Length];
             for (int i = 0; i < _treePrefabs.Length; i++) protos[i] = new TreePrototype { prefab = _treePrefabs[i] };
             data.treePrototypes = protos;
 
             var rnd = new System.Random(909);
             var list = new List<TreeInstance>();
-            for (int i = 0; i < 900; i++)
+            for (int i = 0; i < 1400; i++)
             {
                 float nx = (float)rnd.NextDouble(), nz = (float)rnd.NextDouble();
+                int mx = Mathf.Clamp(Mathf.RoundToInt(nx * (GrassMaskRes - 1)), 0, GrassMaskRes - 1);
+                int mz = Mathf.Clamp(Mathf.RoundToInt(nz * (GrassMaskRes - 1)), 0, GrassMaskRes - 1);
+                if (MaskedNear(mx, mz, 4)) continue;   // never on/near a maintained surface
                 float edge = Mathf.Min(Mathf.Min(nx, 1f - nx), Mathf.Min(nz, 1f - nz));
-                if (edge > 0.16f && rnd.NextDouble() < 0.82) continue; // dense at the edges, sparse inside
+                if (edge > 0.16f && rnd.NextDouble() < 0.80) continue; // dense at the edges, sparse inside
                 list.Add(new TreeInstance
                 {
                     position = new Vector3(nx, 0f, nz),         // normalised over the terrain
@@ -266,7 +270,21 @@ namespace Greenkeeper.Unity.Play
                     lightmapColor = Color.white,
                 });
             }
-            terrain.terrainData.SetTreeInstances(list.ToArray(), true);
+            data.SetTreeInstances(list.ToArray(), true);
+        }
+
+        /// <summary>True if any mask cell within <paramref name="r"/> cells marks a maintained surface.</summary>
+        private bool MaskedNear(int cx, int cz, int r)
+        {
+            if (_grassMask == null) return false;
+            for (int dz = -r; dz <= r; dz++)
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    int x = cx + dx, z = cz + dz;
+                    if (x < 0 || z < 0 || x >= GrassMaskRes || z >= GrassMaskRes) continue;
+                    if (_grassMask[z, x] > 0.5f) return true;
+                }
+            return false;
         }
 
         // ---- detail (geometry) grass on the Terrain ----
@@ -484,11 +502,13 @@ namespace Greenkeeper.Unity.Play
             if (_game.Course.Get($"approach-{h}") != null)
             {
                 Vector2 apr = Vector2.Lerp(center[m - 2], greenP, 0.35f);
-                BuildBlob(T, $"approach-{h}", "Approach", apr, ProcMesh.EllipseRadii(4.5f, 3.5f, 30, 0.08f, hole * 53 + 7, 0f), 0.03f, new Color(0.20f, 0.45f, 0.19f));
+                BuildBlob(T, $"approach-{h}", "Approach", apr, ProcMesh.EllipseRadii(4.5f, 3.5f, 36, 0.07f, hole * 53 + 7, 0f), 0.03f, new Color(0.20f, 0.45f, 0.19f));
+                Vector3 aw = T.TransformPoint(new Vector3(apr.x, 0f, apr.y));
+                StampGrassMask(aw.x, aw.z, 5.5f);
             }
             float gx = 4.2f + 1.2f * R(), gz = 4.8f + 1.4f * R();
             var greenObj = BuildBlob(T, $"green-{h}", "Green", greenP,
-                ProcMesh.EllipseRadii(gx, gz, 48, 0.06f, hole * 71 + 3, 0.20f), 0.04f, new Color(0.16f, 0.42f, 0.16f));
+                ProcMesh.EllipseRadii(gx, gz, 64, 0.04f, hole * 71 + 3, 0.20f), 0.04f, new Color(0.16f, 0.42f, 0.16f));
             var gsr = greenObj.GetComponent<SurfaceRenderer>();
             gsr.spatialGreen = true; gsr.greenHalf = new Vector2(gx, gz);
             greenObj.transform.localRotation = Quaternion.Euler(0f, 30f * R(), 0f); // yaw only — tilt caused floating

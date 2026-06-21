@@ -78,20 +78,31 @@ namespace Greenkeeper.Unity.EditorTools
             {
                 EnsureFolder("Assets/Resources/TerrainLayers");
                 var tls = AssetDatabase.FindAssets("t:TerrainLayer", roots)
-                    .Select(AssetDatabase.GUIDToAssetPath).Distinct().Take(3).ToList();
-                string[] names = { "Rough", "Fairway", "Ground" };
-                for (int i = 0; i < tls.Count; i++)
-                {
-                    string dest = $"Assets/Resources/TerrainLayers/{names[i]}.terrainlayer";
-                    if (AssetDatabase.LoadAssetAtPath<TerrainLayer>(dest) != null) AssetDatabase.DeleteAsset(dest);
-                    if (AssetDatabase.CopyAsset(tls[i], dest)) { layers++; sb.AppendLine($"  layer -> {names[i]}  ({Path.GetFileName(tls[i])})"); }
-                }
+                    .Select(AssetDatabase.GUIDToAssetPath).Distinct().ToList();
+                string[] grassWords = { "grass", "lawn", "meadow", "turf", "field", "green" };
+                string[] dirtWords = { "dirt", "soil", "ground", "path", "mud", "gravel", "sand", "forest", "rock" };
+                var grass = tls.Where(p => grassWords.Any(p.ToLower().Contains)).ToList();
+                var dirt = tls.Where(p => dirtWords.Any(p.ToLower().Contains)).ToList();
+                // Map grass-like layers to Rough/Fairway; a dirt-like one to Ground. Skip if none match
+                // (so we never put a dirt texture down as the base "grass").
+                if (grass.Count > 0) layers += CopyLayer(grass[0], "Rough", sb);
+                if (grass.Count > 0) layers += CopyLayer(grass.Count > 1 ? grass[1] : grass[0], "Fairway", sb);
+                if (dirt.Count > 0) layers += CopyLayer(dirt[0], "Ground", sb);
+                if (grass.Count == 0) sb.AppendLine("  (no grass-named TerrainLayer found — leaving the green fallback)");
             }
 
             AssetDatabase.Refresh();
             sb.Insert(0, $"Copied {trees} trees, {grass} grass, {layers} terrain layers.\n\n");
             _log = sb.ToString();
             Debug.Log("[VegetationSetup] " + _log);
+        }
+
+        private int CopyLayer(string src, string name, System.Text.StringBuilder sb)
+        {
+            string dest = $"Assets/Resources/TerrainLayers/{name}.terrainlayer";
+            if (AssetDatabase.LoadAssetAtPath<TerrainLayer>(dest) != null) AssetDatabase.DeleteAsset(dest);
+            if (AssetDatabase.CopyAsset(src, dest)) { sb.AppendLine($"  layer -> {name}  ({Path.GetFileName(src)})"); return 1; }
+            return 0;
         }
 
         private int CopySet(IEnumerable<string> srcPaths, string destFolder, int max, System.Text.StringBuilder sb, string kind)
