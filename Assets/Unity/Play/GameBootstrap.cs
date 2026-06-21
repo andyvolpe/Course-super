@@ -360,16 +360,31 @@ namespace Greenkeeper.Unity.Play
                         float jx = (float)(rnd.NextDouble() - 0.5) * (_terrW / GrassMaskRes) * stride;
                         float jz = (float)(rnd.NextDouble() - 0.5) * (_terrL / GrassMaskRes) * stride;
                         float px = wx + jx, pz = wz + jz;
+                        float surfaceY = SurfaceGroundY(px, pz);
                         var prefab = _grassPrefabs[rnd.Next(_grassPrefabs.Length)];
-                        var g = Instantiate(prefab, new Vector3(px, SurfaceGroundY(px, pz), pz),
+                        var g = Instantiate(prefab, new Vector3(px, surfaceY, pz),
                                             Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f), parent);
                         float s = 0.7f + (float)rnd.NextDouble() * 0.8f; // 0.7..1.5 size variety
                         g.transform.localScale = new Vector3(s, s * (0.9f + (float)rnd.NextDouble() * 0.5f), s);
+                        SeatOnGround(g, surfaceY); // plant by the BASE, not the pivot, so nothing sinks
                         placed++;
                     }
                 Debug.Log($"[Bootstrap] scattered {placed} lit grass tufts in the rough.");
             }
             catch (System.Exception e) { Debug.LogWarning("[Bootstrap] grass scatter skipped: " + e.Message); }
+        }
+
+        /// <summary>Shift an instance vertically so the BOTTOM of its combined render bounds rests on the
+        /// ground (a hair below), regardless of where the prefab's pivot sits — kills the "sunk halfway
+        /// into the turf" look for prefabs whose origin is at their centre rather than their base.</summary>
+        private static void SeatOnGround(GameObject g, float surfaceY)
+        {
+            var rends = g.GetComponentsInChildren<Renderer>();
+            if (rends.Length == 0) return;
+            Bounds b = rends[0].bounds;
+            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+            float delta = (surfaceY - 0.03f) - b.min.y; // base just into the ground, never floating
+            g.transform.position += new Vector3(0f, delta, 0f);
         }
 
         // ---- detail (geometry) grass on the Terrain ----
