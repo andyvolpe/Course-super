@@ -22,7 +22,7 @@ namespace Greenkeeper.Unity.Play
         [Header("World")]
         public int weatherSeed = 12345;
         public bool assists = false;
-        public int greensToRender = 2;
+        public int holesToRender = 3;     // full holes laid out tee -> fairway -> approach -> green
         public float cellSizeM = 2.0f;
 
         private GameManager _game;
@@ -60,23 +60,23 @@ namespace Greenkeeper.Unity.Play
                 if (_game == null || _game.Course == null) { _error = "GameManager/course failed to build."; return; }
 
                 Material greenMat = MakeGreenMaterial();
-                var renderers = new System.Collections.Generic.List<GreenRenderer>();
-                for (int i = 0; i < greensToRender; i++)
+                var greens = new System.Collections.Generic.List<GreenRenderer>();
+                int holes = Mathf.Max(1, holesToRender);
+                for (int i = 0; i < holes; i++)
                 {
-                    string id = $"green-{i + 1:00}";
-                    if (_game.Course.Get(id) == null) continue;
-                    var gr = BuildGreen(id, new Vector3(i * (greensToRender > 1 ? 12f : 0f), 0f, 10f), 3f + i * 2f, greenMat);
-                    gr.game = _game;
-                    renderers.Add(gr);
+                    int hole = i + 1;
+                    if (_game.Course.Get($"green-{hole:00}") == null) continue;
+                    var gr = BuildHole(hole, new Vector3(i * 22f, 0f, 0f), greenMat);
+                    if (gr != null) greens.Add(gr);
                 }
 
                 var (player, cam) = BuildPlayer();
-                BuildBallAndCup(player, cam, renderers.Count > 0 ? renderers[0] : null);
+                BuildBallAndCup(player, cam, greens.Count > 0 ? greens[0] : null);
                 BuildHuds(player);
 
                 SetPlanMode(true);
-                Debug.Log($"[Bootstrap] scene built: {_game.Course.Zones.Count} zones, {renderers.Count} greens rendered. " +
-                          "TAB to walk; hold LMB to putt.");
+                Debug.Log($"[Bootstrap] scene built: {_game.Course.Zones.Count} zones, {greens.Count} holes rendered " +
+                          "(tee/fairway/approach/green/rough/bunkers). TAB to walk; hold LMB to putt.");
             }
             catch (System.Exception e)
             {
@@ -102,8 +102,11 @@ namespace Greenkeeper.Unity.Play
         {
             var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
             ground.name = "Ground";
-            ground.transform.localScale = new Vector3(10f, 1f, 10f); // 100m x 100m
-            var mat = SolidMaterial(new Color(0.30f, 0.40f, 0.22f)); // rough/fairway green
+            // Big enough to sit under every rendered hole (holes march along +X, ~54m deep in +Z).
+            float centerX = (Mathf.Max(1, holesToRender) - 1) * 22f * 0.5f;
+            ground.transform.position = new Vector3(centerX, -0.05f, 25f);
+            ground.transform.localScale = new Vector3(30f, 1f, 30f); // 300m x 300m
+            var mat = SolidMaterial(new Color(0.24f, 0.32f, 0.16f)); // native-rough backdrop
             if (mat != null) ground.GetComponent<Renderer>().material = mat;
         }
 
@@ -115,6 +118,59 @@ namespace Greenkeeper.Unity.Play
             game.assistsEnabled = assists;
             game.NewGame(); // rebuild with our seed/difficulty
             return game;
+        }
+
+        // ---- holes (all surfaces) ----
+
+        /// <summary>
+        /// Lays out one whole hole in the world — rough pad, tee, fairway, approach, bunkers, and the
+        /// 3x3 green at the far end — each quad driven by its sim zone via SurfaceRenderer/GreenRenderer.
+        /// </summary>
+        private GreenRenderer BuildHole(int hole, Vector3 origin, Material greenMat)
+        {
+            string h = hole.ToString("00");
+
+            // Native rough pad under the whole hole (the miss-penalty surface you maintain).
+            BuildSurfaceQuad($"rough-{h}", origin + new Vector3(0f, 0f, 18f), 16f, 42f, -0.03f, new Color(0.22f, 0.34f, 0.14f));
+
+            // Playing corridor: tee -> fairway -> approach.
+            if (_game.Course.Get($"tee-{h}") != null)
+                BuildSurfaceQuad($"tee-{h}", origin + new Vector3(0f, 0f, 2f), 4f, 4f, 0f, new Color(0.18f, 0.44f, 0.18f));
+            if (_game.Course.Get($"fairway-{h}") != null)
+                BuildSurfaceQuad($"fairway-{h}", origin + new Vector3(0f, 0f, 16f), 8f, 22f, 0f, new Color(0.20f, 0.42f, 0.18f));
+            if (_game.Course.Get($"approach-{h}") != null)
+                BuildSurfaceQuad($"approach-{h}", origin + new Vector3(0f, 0f, 29f), 7f, 4f, 0f, new Color(0.17f, 0.43f, 0.17f));
+
+            // Whatever bunkers this hole has.
+            BuildBunkerIfExists($"bunker-{h}-1", origin + new Vector3(5f, 0f, 31f));
+            BuildBunkerIfExists($"bunker-{h}-2", origin + new Vector3(-5f, 0f, 30f));
+            BuildBunkerIfExists($"bunker-{h}-3", origin + new Vector3(6f, 0f, 18f));
+
+            // The green at the far end (existing 3x3 sub-cell renderer; ball/cup live here for hole 1).
+            var gr = BuildGreen($"green-{h}", origin + new Vector3(0f, 0f, 33f), 3f + hole, greenMat);
+            gr.game = _game;
+            return gr;
+        }
+
+        private void BuildBunkerIfExists(string zoneId, Vector3 center)
+        {
+            if (_game.Course.Get(zoneId) == null) return;
+            BuildSurfaceQuad(zoneId, center, 3.2f, 3.2f, -0.02f, new Color(0.82f, 0.74f, 0.55f));
+        }
+
+        private GameObject BuildSurfaceQuad(string zoneId, Vector3 center, float sizeX, float sizeZ, float y, Color baseColor)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Plane); // faces +Y, has MeshCollider (walkable)
+            go.name = $"Surf_{zoneId}";
+            go.transform.position = center + Vector3.up * y;
+            go.transform.localScale = new Vector3(sizeX / 10f, 1f, sizeZ / 10f); // Plane is 10x10 at scale 1
+            var mr = go.GetComponent<Renderer>();
+            var mat = SolidMaterial(baseColor);
+            if (mat != null) mr.material = mat;
+            var sr = go.AddComponent<SurfaceRenderer>();
+            sr.game = _game;
+            sr.zoneId = zoneId;
+            return go;
         }
 
         // ---- greens ----

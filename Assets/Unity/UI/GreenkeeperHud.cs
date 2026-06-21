@@ -1,4 +1,5 @@
 using UnityEngine;
+using Greenkeeper.Sim.Config;
 using Greenkeeper.Sim.Crew;
 using Greenkeeper.Sim.Economy;
 using Greenkeeper.Sim.Legibility;
@@ -170,6 +171,19 @@ namespace Greenkeeper.Unity.UI
 
             var zone = game.Course.Get(id);
             if (zone == null) { GUILayout.EndArea(); return; }
+
+            // Bunkers are non-turf: show sand consistency + a rake, not the turf reads.
+            if (zone.Type == ZoneType.Bunker)
+            {
+                GUILayout.Space(4);
+                GUILayout.Label("BUNKER", T.Section);
+                GUILayout.Label($"sand consistency <b>{zone.SandQualityPct:0}</b>" +
+                    (zone.WashedOut ? $"   <color=#{Hex(T.Clay)}>WASHED OUT</color>" : ""), T.Body);
+                Row(("Rake all bunkers", () => AddTask(TaskCatalog.RakeBunkers())));
+                GUILayout.EndArea();
+                return;
+            }
+
             var obs = game.Legibility.Observe(zone, Day);
             int cell = (!Plan && inspection != null) ? Mathf.Clamp(inspection.AimedCellIndex, 0, obs.Tells.Length - 1) : 0;
             TellAppearance t = obs.Tells[cell];
@@ -192,7 +206,7 @@ namespace Greenkeeper.Unity.UI
                 ("Soil test", () => game.Legibility.SoilTest(id, Day)));
 
             GUILayout.Space(2);
-            GUILayout.Label("ADD FOR THIS GREEN", T.Section);
+            GUILayout.Label("ADD FOR THIS SURFACE", T.Section);
             Row(("Water", () => AddTask(TaskCatalog.Water(id))),
                 ("Spray", () => AddTask(TaskCatalog.Spray(id))),
                 ("Mow", () => AddTask(TaskCatalog.WalkMow(id))));

@@ -17,7 +17,7 @@ namespace Greenkeeper.Unity.Play
     {
         public GameManager game;
         public Camera cam;
-        public float reach = 4f;
+        public float reach = 6f;
         public LayerMask greenMask = ~0;
 
         [Header("Keys")]
@@ -60,19 +60,25 @@ namespace Greenkeeper.Unity.Play
             Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
             if (!Physics.Raycast(ray, out RaycastHit hit, reach, greenMask)) return;
 
-            // Find the GreenRenderer this collider belongs to and which sub-cell was hit.
+            // A green? Resolve which sub-cell was hit (greens are spatially resolved).
             var gr = hit.collider.GetComponentInParent<GreenRenderer>();
-            if (gr == null) return;
-            AimedZoneId = gr.zoneId;
-            for (int i = 0; i < gr.cellRenderers.Length; i++)
+            if (gr != null)
             {
-                if (gr.cellRenderers[i] != null && hit.collider.transform.IsChildOf(gr.cellRenderers[i].transform.parent)
-                    && hit.collider.gameObject == gr.cellRenderers[i].gameObject)
+                AimedZoneId = gr.zoneId;
+                for (int i = 0; i < gr.cellRenderers.Length; i++)
                 {
-                    AimedCellIndex = i;
-                    break;
+                    if (gr.cellRenderers[i] != null && hit.collider.gameObject == gr.cellRenderers[i].gameObject)
+                    {
+                        AimedCellIndex = i;
+                        break;
+                    }
                 }
+                return;
             }
+
+            // Otherwise any other surface (fairway/tee/approach/rough/bunker) is a single zone.
+            var sr = hit.collider.GetComponent<SurfaceRenderer>();
+            if (sr != null) AimedZoneId = sr.zoneId;
         }
     }
 }
