@@ -703,18 +703,28 @@ namespace Greenkeeper.Unity.Play
             return go;
         }
 
-        /// <summary>Set each vertex's local Y so the surface sits on the terrain (GroundY) plus a lift.</summary>
+        /// <summary>Set each vertex's local Y so the surface sits on the terrain (GroundY) plus a lift, and
+        /// give each vertex the SMOOTH ground normal (finite differences) instead of RecalculateNormals.
+        /// Coarse draped geometry otherwise gets faceted normals that shade as dark angular polygons over
+        /// the smoothly-lit terrain — that was the "patchwork", not the colour.</summary>
         private void DrapeOntoTerrain(Mesh mesh, Transform root, Vector3 localPos, float lift)
         {
             var verts = mesh.vertices;
+            var norms = new Vector3[verts.Length];
             float rootY = root.position.y;
+            const float e = 1.5f; // ground-normal sample step (m)
             for (int i = 0; i < verts.Length; i++)
             {
                 Vector3 world = root.TransformPoint(localPos + new Vector3(verts[i].x, 0f, verts[i].z));
                 verts[i].y = SurfaceGroundY(world.x, world.z) + lift - rootY - localPos.y;
+
+                float hL = SurfaceGroundY(world.x - e, world.z), hR = SurfaceGroundY(world.x + e, world.z);
+                float hD = SurfaceGroundY(world.x, world.z - e), hU = SurfaceGroundY(world.x, world.z + e);
+                Vector3 wn = new Vector3(hL - hR, 2f * e, hD - hU).normalized;       // smooth terrain normal
+                norms[i] = root.InverseTransformDirection(wn);                        // mesh normals are local
             }
             mesh.vertices = verts;
-            mesh.RecalculateNormals();
+            mesh.normals = norms;
             mesh.RecalculateBounds();
         }
 
