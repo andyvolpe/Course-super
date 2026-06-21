@@ -26,6 +26,7 @@ namespace Greenkeeper.Unity.Play
         public bool assists = false;
         public int holesToRender = 18;    // full holes laid out tee -> fairway -> approach -> green
         public float cellSizeM = 2.0f;
+        public bool enableTerrainDetailGrass = false; // URP renders terrain detail grass dark — off by default
 
         // Real-scale layout (metres). Holes are 100–530 m long, so the grid cells are big.
         private const int Cols = 6;
@@ -105,9 +106,14 @@ namespace Greenkeeper.Unity.Play
                 if (_terrain == null || _treePrefabs == null || _treePrefabs.Length == 0)
                     BuildPerimeterTrees(maxXForTrees: (Cols - 1) * LaneW, maxZForTrees: ((holes + Cols - 1) / Cols - 1) * RowD + 540f);
 
-                // Real geometry grass + terrain trees across the rough + surrounds (after holes so the
-                // mask is filled — trees/grass avoid the greens/fairways/tees/bunkers).
-                if (_terrain != null) { PlaceTerrainTrees(_terrain); ApplyGrassDetail(_terrain); }
+                // Terrain trees (after holes so the mask is filled — they avoid the surfaces). Detail
+                // grass is OFF by default: URP renders terrain detail grass (esp. imported mesh grass)
+                // near-black, which shows as dark patches. Splat ground + trees carry the look.
+                if (_terrain != null)
+                {
+                    PlaceTerrainTrees(_terrain);
+                    if (enableTerrainDetailGrass) ApplyGrassDetail(_terrain);
+                }
 
                 var (player, cam) = BuildPlayer();
                 BuildBallAndCup(player, holesViz);
