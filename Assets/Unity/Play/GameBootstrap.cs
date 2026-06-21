@@ -435,13 +435,21 @@ namespace Greenkeeper.Unity.Play
                         healthyColor = new Color(0.45f, 0.6f, 0.32f), dryColor = new Color(0.55f, 0.55f, 0.32f),
                         minWidth = 0.5f, maxWidth = 1.1f, minHeight = 0.3f, maxHeight = 0.8f, noiseSpread = 0.4f,
                     });
-                if (protos.Count == 0) // generated fallback so it's never bare
+                if (protos.Count == 0) // generated fallback so it's never bare — a tall tuft + a short dense clump
+                {
                     protos.Add(new DetailPrototype
                     {
-                        prototypeTexture = MakeGrassBillboardTex(), renderMode = DetailRenderMode.GrassBillboard,
-                        healthyColor = new Color(0.42f, 0.58f, 0.30f), dryColor = new Color(0.55f, 0.55f, 0.32f),
-                        minWidth = 0.5f, maxWidth = 1.1f, minHeight = 0.3f, maxHeight = 0.8f, noiseSpread = 0.4f,
+                        prototypeTexture = MakeGrassBillboardTex(7, 22, 0.55f, 0.95f), renderMode = DetailRenderMode.GrassBillboard,
+                        healthyColor = new Color(0.80f, 0.92f, 0.62f), dryColor = new Color(0.74f, 0.78f, 0.50f),
+                        minWidth = 0.6f, maxWidth = 1.3f, minHeight = 0.45f, maxHeight = 1.1f, noiseSpread = 0.5f,
                     });
+                    protos.Add(new DetailPrototype
+                    {
+                        prototypeTexture = MakeGrassBillboardTex(19, 40, 0.28f, 0.55f), renderMode = DetailRenderMode.GrassBillboard,
+                        healthyColor = new Color(0.72f, 0.86f, 0.54f), dryColor = new Color(0.70f, 0.74f, 0.48f),
+                        minWidth = 0.7f, maxWidth = 1.5f, minHeight = 0.22f, maxHeight = 0.5f, noiseSpread = 0.5f,
+                    });
+                }
                 data.detailPrototypes = protos.ToArray();
 
                 int n = protos.Count;
@@ -457,8 +465,8 @@ namespace Greenkeeper.Unity.Play
                         if (_grassMask[mz, mx] > 0.5f) continue; // short surface — no tall grass
                         float wx = _terrMinX + u * _terrW, wz = _terrMinZ + v * _terrL;
                         float nz = Mathf.PerlinNoise(wx * 0.09f + 5f, wz * 0.09f + 9f);
-                        if (nz <= 0.42f) continue;
-                        maps[rnd.Next(n)][z, x] = Mathf.RoundToInt(nz * 7f); // clumpy; spread across prototypes
+                        if (nz <= 0.40f) continue;
+                        maps[rnd.Next(n)][z, x] = Mathf.RoundToInt(nz * 9f); // clumpy; spread across prototypes
                     }
                 for (int i = 0; i < n; i++) data.SetDetailLayer(0, 0, i, maps[i]);
 
@@ -466,37 +474,51 @@ namespace Greenkeeper.Unity.Play
                 data.wavingGrassStrength = 0.35f;
                 data.wavingGrassSpeed = 0.5f;
                 data.wavingGrassAmount = 0.3f;
-                data.wavingGrassTint = new Color(0.7f, 0.75f, 0.5f, 1f);
+                data.wavingGrassTint = new Color(0.58f, 0.68f, 0.42f, 1f); // green, not the old washed-out yellow
             }
             catch (System.Exception e) { Debug.LogWarning("[Bootstrap] detail grass skipped: " + e.Message); }
         }
 
         /// <summary>A small grass-tuft billboard (a few alpha'd green blades on transparent background).</summary>
-        private static Texture2D MakeGrassBillboardTex()
+        /// <summary>
+        /// Generate a LUSH grass-tuft billboard (used when no real grass art is imported). Many curved,
+        /// tapering blades fill the quad with their BASES pinned to the bottom row (v=0 == the terrain
+        /// surface) so the tuft stands on the ground instead of reading as thin, half-sunk stubble.
+        /// </summary>
+        private static Texture2D MakeGrassBillboardTex(int seed, int blades, float topMin, float topMax)
         {
-            const int S = 64;
-            var t = new Texture2D(S, S, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            const int S = 96;
+            var t = new Texture2D(S, S, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp };
             var px = new Color[S * S];
             for (int i = 0; i < px.Length; i++) px[i] = new Color(0, 0, 0, 0);
-            var rnd = new System.Random(7);
-            int blades = 7;
+            var rnd = new System.Random(seed);
+            var baseCol = new Color(0.10f, 0.26f, 0.09f);
+            var tipCol = new Color(0.40f, 0.60f, 0.26f);
+
+            void Plot(int x, int y, Color c)
+            {
+                if (x < 0 || x >= S || y < 0 || y >= S) return;
+                int i = y * S + x;
+                px[i] = c.a >= px[i].a ? c : px[i]; // keep the most opaque sample
+            }
+
             for (int b = 0; b < blades; b++)
             {
                 int baseX = 6 + rnd.Next(S - 12);
-                int top = 30 + rnd.Next(28);
-                float lean = (float)(rnd.NextDouble() - 0.5) * 10f;
-                for (int y = 2; y < top; y++)
+                int top = Mathf.RoundToInt(Mathf.Lerp(topMin, topMax, (float)rnd.NextDouble()) * S);
+                float lean = (float)(rnd.NextDouble() - 0.5) * 26f;     // sideways sweep
+                float w0 = 1.6f + (float)rnd.NextDouble() * 1.8f;       // base half-width
+                float shade = 0.82f + (float)rnd.NextDouble() * 0.36f;  // per-blade brightness variety
+                for (int y = 0; y < top; y++)                            // y=0 => sits on the ground
                 {
-                    float ty = (y - 2f) / (top - 2f);
-                    int w = Mathf.Max(0, Mathf.RoundToInt(1.6f * (1f - ty))); // taper to a point
-                    int cx = baseX + Mathf.RoundToInt(lean * ty);
-                    var col = Color.Lerp(new Color(0.13f, 0.30f, 0.10f), new Color(0.34f, 0.52f, 0.22f), ty);
-                    for (int dx = -w; dx <= w; dx++)
-                    {
-                        int x = cx + dx;
-                        if (x < 0 || x >= S) continue;
-                        px[y * S + x] = col;
-                    }
+                    float ty = y / (float)top;
+                    float w = w0 * (1f - ty);                            // taper to a point
+                    int cx = baseX + Mathf.RoundToInt(lean * ty * ty);  // curves more toward the tip
+                    Color col = Color.Lerp(baseCol, tipCol, ty) * shade; col.a = 1f;
+                    int iw = Mathf.FloorToInt(w);
+                    for (int dx = -iw; dx <= iw; dx++) Plot(cx + dx, y, col);
+                    Color edge = col; edge.a = 0.45f;                    // soft 1px feather either side
+                    Plot(cx - iw - 1, y, edge); Plot(cx + iw + 1, y, edge);
                 }
             }
             t.SetPixels(px); t.Apply();
