@@ -18,7 +18,7 @@ namespace Greenkeeper.Unity.UI
 
         private void Awake()
         {
-            if (game == null) game = GetComponent<GameManager>() ?? FindObjectOfType<GameManager>();
+            if (game == null) game = GetComponent<GameManager>() ?? FindFirstObjectByType<GameManager>();
         }
 
         private void OnGUI()

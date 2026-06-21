@@ -26,8 +26,8 @@ namespace Greenkeeper.Unity.UI
 
         private void Awake()
         {
-            if (game == null) game = FindObjectOfType<GameManager>();
-            if (debugPanel == null) debugPanel = FindObjectOfType<GreenDebugPanel>();
+            if (game == null) game = FindFirstObjectByType<GameManager>();
+            if (debugPanel == null) debugPanel = FindFirstObjectByType<GreenDebugPanel>();
         }
 
         private void Update()

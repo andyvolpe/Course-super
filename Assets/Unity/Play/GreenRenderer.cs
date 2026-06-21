@@ -28,7 +28,7 @@ namespace Greenkeeper.Unity.Play
 
         private void Awake()
         {
-            if (game == null) game = FindObjectOfType<GameManager>();
+            if (game == null) game = FindFirstObjectByType<GameManager>();
             _mpb = new MaterialPropertyBlock();
         }
 

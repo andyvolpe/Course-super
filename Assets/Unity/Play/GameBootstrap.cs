@@ -39,7 +39,7 @@ namespace Greenkeeper.Unity.Play
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoBoot()
         {
-            if (FindObjectOfType<GameBootstrap>() != null) return; // already placed by hand
+            if (FindFirstObjectByType<GameBootstrap>() != null) return; // already placed by hand
             var go = new GameObject("GameBootstrap (auto)");
             go.AddComponent<GameBootstrap>();
             Debug.Log("[Bootstrap] auto-booted — no GameBootstrap was in the scene, so one was created.");
@@ -85,7 +85,7 @@ namespace Greenkeeper.Unity.Play
 
         private void BuildLighting()
         {
-            if (FindObjectOfType<Light>() != null) return;
+            if (FindFirstObjectByType<Light>() != null) return;
             var go = new GameObject("Sun");
             var l = go.AddComponent<Light>();
             l.type = LightType.Directional;

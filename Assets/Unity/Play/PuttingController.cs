@@ -41,7 +41,7 @@ namespace Greenkeeper.Unity.Play
 
         private void Awake()
         {
-            if (game == null) game = FindObjectOfType<GameManager>();
+            if (game == null) game = FindFirstObjectByType<GameManager>();
             if (cam == null) cam = GetComponentInChildren<Camera>() ?? Camera.main;
         }
 
