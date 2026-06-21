@@ -259,13 +259,12 @@ namespace Greenkeeper.Unity.Play
                 }
             data.SetHeights(0, 0, heights);
 
-            // Splat layers: the terrain reads as ONE continuous rough. A second near-rough tone gives
-            // gentle, low-contrast tonal variation (not fairway-bright patches); dirt is essentially off.
+            // Links/meadow ground: sage-green base, broad GOLDEN fescue drifts, and the odd sandy/worn spot.
             data.terrainLayers = new[]
             {
-                Layer("Rough", new Color(0.20f, 0.31f, 0.13f), 9f),
-                Layer("Fairway", new Color(0.23f, 0.35f, 0.15f), 8f),  // only slightly lighter than rough
-                Layer("Ground", new Color(0.30f, 0.27f, 0.17f), 6f),
+                Layer("Rough", new Color(0.29f, 0.34f, 0.18f), 9f),    // sage-green meadow base
+                Layer("Fairway", new Color(0.50f, 0.45f, 0.24f), 9f),  // tawny golden fescue drift
+                Layer("Ground", new Color(0.68f, 0.60f, 0.42f), 7f),   // pale links sand / worn
             };
             int ar = 512; data.alphamapResolution = ar;
             var alpha = new float[ar, ar, 3];
@@ -274,10 +273,9 @@ namespace Greenkeeper.Unity.Play
                 {
                     float wx = minX + width * x / (ar - 1);
                     float wz = minZ + length * y / (ar - 1);
-                    // Rough dominates everywhere; a subtle lighter mottle and a very rare worn spot avoid
-                    // the blotchy "fairway patches in the rough" look from before.
-                    float fair = Mathf.Clamp01((Mathf.PerlinNoise(wx * 0.015f + 4f, wz * 0.015f + 9f) - 0.45f) * 1.6f) * 0.30f;
-                    float dirt = Mathf.Clamp01((Mathf.PerlinNoise(wx * 0.05f + 40f, wz * 0.05f + 70f) - 0.88f) * 4.0f) * 0.18f;
+                    // Broad golden drifts through a green base (the patchy links meadow look); sand is rare.
+                    float fair = Mathf.Clamp01((Mathf.PerlinNoise(wx * 0.012f + 4f, wz * 0.012f + 9f) - 0.42f) * 1.7f) * 0.55f;
+                    float dirt = Mathf.Clamp01((Mathf.PerlinNoise(wx * 0.05f + 40f, wz * 0.05f + 70f) - 0.86f) * 4.0f) * 0.22f;
                     float rough = 1.0f;
                     float sum = rough + fair + dirt;
                     alpha[y, x, 0] = rough / sum;
@@ -302,10 +300,8 @@ namespace Greenkeeper.Unity.Play
             // layers aren't tinted at runtime).
             var mat = LoadSurfaceMaterial(key);
             Texture2D tex = mat != null ? (mat.HasProperty("_BaseMap") ? mat.GetTexture("_BaseMap") : mat.mainTexture) as Texture2D : null;
-            if (tex == null)
-                tex = key == "Ground"
-                    ? TurfTexture(91, new Color(0.34f, 0.27f, 0.16f), 0.30f, 0, 0f)   // dirt
-                    : TurfTexture(key.GetHashCode(), new Color(0.22f, 0.40f, 0.18f), 0.22f, 0, 0f); // grass
+            if (tex == null) // generated, tinted with the REQUESTED tone (so the meadow can actually vary)
+                tex = TurfTexture(key == "Ground" ? 91 : key.GetHashCode(), fallback, key == "Ground" ? 0.28f : 0.20f, 0, 0f);
             return new TerrainLayer { diffuseTexture = tex, tileSize = new Vector2(tileSize, tileSize) };
         }
 
@@ -321,14 +317,14 @@ namespace Greenkeeper.Unity.Play
 
             var rnd = new System.Random(909);
             var list = new List<TreeInstance>();
-            for (int i = 0; i < 3500; i++)
+            for (int i = 0; i < 1400; i++) // links are open: a perimeter treeline only, not a forest
             {
                 float nx = (float)rnd.NextDouble(), nz = (float)rnd.NextDouble();
                 int mx = Mathf.Clamp(Mathf.RoundToInt(nx * (GrassMaskRes - 1)), 0, GrassMaskRes - 1);
                 int mz = Mathf.Clamp(Mathf.RoundToInt(nz * (GrassMaskRes - 1)), 0, GrassMaskRes - 1);
                 if (MaskedNear(mx, mz, 4)) continue;   // never on/near a maintained surface
                 float edge = Mathf.Min(Mathf.Min(nx, 1f - nx), Mathf.Min(nz, 1f - nz));
-                if (edge > 0.16f && rnd.NextDouble() < 0.80) continue; // dense at the edges, sparse inside
+                if (edge > 0.12f && rnd.NextDouble() < 0.94) continue; // hug the boundary, leave the interior open
                 list.Add(new TreeInstance
                 {
                     position = new Vector3(nx, 0f, nz),         // normalised over the terrain
@@ -465,19 +461,19 @@ namespace Greenkeeper.Unity.Play
                         healthyColor = new Color(0.45f, 0.6f, 0.32f), dryColor = new Color(0.55f, 0.55f, 0.32f),
                         minWidth = 0.5f, maxWidth = 1.1f, minHeight = 0.3f, maxHeight = 0.8f, noiseSpread = 0.4f,
                     });
-                if (protos.Count == 0) // generated fallback so it's never bare — a tall tuft + a short dense clump
+                if (protos.Count == 0) // links/meadow fallback: tall windswept fescue + a shorter sage meadow base
                 {
                     protos.Add(new DetailPrototype
                     {
-                        prototypeTexture = MakeGrassBillboardTex(7, 22, 0.55f, 0.95f), renderMode = DetailRenderMode.GrassBillboard,
-                        healthyColor = new Color(0.80f, 0.92f, 0.62f), dryColor = new Color(0.74f, 0.78f, 0.50f),
-                        minWidth = 0.6f, maxWidth = 1.3f, minHeight = 0.45f, maxHeight = 1.1f, noiseSpread = 0.5f,
+                        prototypeTexture = MakeGrassBillboardTex(7, 18, 0.6f, 1.0f), renderMode = DetailRenderMode.GrassBillboard,
+                        healthyColor = new Color(0.80f, 0.74f, 0.45f), dryColor = new Color(0.78f, 0.66f, 0.36f), // golden fescue
+                        minWidth = 0.6f, maxWidth = 1.4f, minHeight = 0.6f, maxHeight = 1.6f, noiseSpread = 0.6f,
                     });
                     protos.Add(new DetailPrototype
                     {
-                        prototypeTexture = MakeGrassBillboardTex(19, 40, 0.28f, 0.55f), renderMode = DetailRenderMode.GrassBillboard,
-                        healthyColor = new Color(0.72f, 0.86f, 0.54f), dryColor = new Color(0.70f, 0.74f, 0.48f),
-                        minWidth = 0.7f, maxWidth = 1.5f, minHeight = 0.22f, maxHeight = 0.5f, noiseSpread = 0.5f,
+                        prototypeTexture = MakeGrassBillboardTex(19, 36, 0.3f, 0.6f), renderMode = DetailRenderMode.GrassBillboard,
+                        healthyColor = new Color(0.62f, 0.68f, 0.40f), dryColor = new Color(0.66f, 0.64f, 0.40f), // sage meadow
+                        minWidth = 0.7f, maxWidth = 1.5f, minHeight = 0.25f, maxHeight = 0.6f, noiseSpread = 0.6f,
                     });
                 }
                 data.detailPrototypes = protos.ToArray();
@@ -501,10 +497,10 @@ namespace Greenkeeper.Unity.Play
                 for (int i = 0; i < n; i++) data.SetDetailLayer(0, 0, i, maps[i]);
 
                 terrain.detailObjectDistance = 180f;
-                data.wavingGrassStrength = 0.35f;
+                data.wavingGrassStrength = 0.45f;                          // breezier links feel
                 data.wavingGrassSpeed = 0.5f;
-                data.wavingGrassAmount = 0.3f;
-                data.wavingGrassTint = new Color(0.58f, 0.68f, 0.42f, 1f); // green, not the old washed-out yellow
+                data.wavingGrassAmount = 0.35f;
+                data.wavingGrassTint = new Color(0.68f, 0.66f, 0.42f, 1f); // golden-sage meadow
             }
             catch (System.Exception e) { Debug.LogWarning("[Bootstrap] detail grass skipped: " + e.Message); }
         }
@@ -522,8 +518,8 @@ namespace Greenkeeper.Unity.Play
             var px = new Color[S * S];
             for (int i = 0; i < px.Length; i++) px[i] = new Color(0, 0, 0, 0);
             var rnd = new System.Random(seed);
-            var baseCol = new Color(0.10f, 0.26f, 0.09f);
-            var tipCol = new Color(0.40f, 0.60f, 0.26f);
+            var baseCol = new Color(0.17f, 0.24f, 0.11f);   // green at the crown
+            var tipCol = new Color(0.66f, 0.58f, 0.30f);    // sun-bleached golden fescue tips (links)
 
             void Plot(int x, int y, Color c)
             {
@@ -1108,11 +1104,59 @@ namespace Greenkeeper.Unity.Play
         // missing ones fall back to the flat colour. SurfaceRenderer still tints them by turf health.
 
         /// <summary>Shared material for a procedural-mesh surface (UVs carry the tiling; colour set per-renderer
-        /// via MPB). Greens use a dedicated fine green turf — never the coarse fairway/forest fallback.</summary>
+        /// via MPB). The PLAYING surfaces (green/fairway/tee/approach) use the bermuda HERO turf when present;
+        /// the rough is the meadow terrain, so it keeps the generated fescue tone.</summary>
         private Material SharedSurfaceMaterial(string key, Color color)
         {
-            Material loaded = key == "Green" ? Resources.Load<Material>("PolyHaven/Green") : LoadSurfaceMaterial(key);
-            return loaded != null ? loaded : TurfMat(key);
+            if (key != "Rough" && key != "Ground")
+            {
+                Material keyMat = key == "Green" ? Resources.Load<Material>("PolyHaven/Green") : LoadSurfaceMaterial(key);
+                if (keyMat != null) return keyMat;
+                Material hero = HeroTurf();
+                if (hero != null) return hero;
+            }
+            return TurfMat(key);
+        }
+
+        private Material _hero; private bool _heroTried;
+        /// <summary>The bermuda hero turf (GDD art target): a ready <c>Resources/PolyHaven/grass_bermuda_01.mat</c>
+        /// if you authored one, else a best-effort PBR material assembled from the raw PolyHaven texture set
+        /// dropped in <c>Resources/PolyHaven/grass_bermuda_01/</c>. Null until you add either.</summary>
+        private Material HeroTurf()
+        {
+            if (_heroTried) return _hero;
+            _heroTried = true;
+            _hero = Resources.Load<Material>("PolyHaven/grass_bermuda_01")
+                 ?? BuildPbrFromFolder("PolyHaven/grass_bermuda_01");
+            return _hero;
+        }
+
+        /// <summary>Assemble a URP/Lit material from a folder of PolyHaven maps (matched by filename suffix).
+        /// For best results set the normal map's import Type to "Normal map" in the Editor.</summary>
+        private Material BuildPbrFromFolder(string folder)
+        {
+            var texs = Resources.LoadAll<Texture2D>(folder);
+            if (texs == null || texs.Length == 0) return null;
+            Texture2D Find(params string[] keys)
+            {
+                foreach (var t in texs) foreach (var k in keys) if (t.name.ToLower().Contains(k)) return t;
+                return null;
+            }
+            var diff = Find("diff", "albedo", "_col", "_base");
+            if (diff == null) return null;
+            var nor = Find("nor_gl", "nor_dx", "_normal", "_nor");
+            var ao = Find("_ao", "ambient");
+            var m = new Material(LitShader());
+            if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", diff);
+            if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", diff);
+            m.mainTexture = diff;
+            if (nor != null && m.HasProperty("_BumpMap")) { m.SetTexture("_BumpMap", nor); m.EnableKeyword("_NORMALMAP"); }
+            if (ao != null && m.HasProperty("_OcclusionMap")) m.SetTexture("_OcclusionMap", ao);
+            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.18f);
+            if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", 0.18f);
+            if (m.HasProperty("_Cull")) m.SetFloat("_Cull", 0f);
+            Debug.Log($"[Bootstrap] built hero turf from {folder} (diff={diff.name}).");
+            return m;
         }
 
         /// <summary>A cached generated turf material per surface — fine green grain (+ subtle mow stripes),
