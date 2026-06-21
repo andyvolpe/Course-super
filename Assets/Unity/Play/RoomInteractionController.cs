@@ -38,11 +38,18 @@ namespace Greenkeeper.Unity.Play
         public DiegeticObject Open { get; private set; }
         public bool PanelOpen => Open != null;
 
-        /// <summary>The moisture meter is a HANDHELD: metering on a green only works while you carry it.</summary>
-        public bool CarryingMeter { get; private set; }
-
-        /// <summary>Depth dial (§0.4): true => routine work is delegated (glance + run); false => you reclaim it.</summary>
-        public bool RoutineDelegated = true;
+        /// <summary>Measurement tools are HANDHELDS you carry out (one at a time): USE on a green performs
+        /// that tool's measured act. The moisture meter reads VWC, the stimpmeter green speed, the firmness
+        /// meter receptivity. This replaces the fiddly meter-only flow.</summary>
+        public CarriedTool Tool { get; private set; }
+        public bool CarryingMeter => Tool == CarriedTool.MoistureMeter; // back-compat for the moisture gate
+        public string ToolName => Tool switch
+        {
+            CarriedTool.MoistureMeter => "moisture meter",
+            CarriedTool.Stimpmeter => "stimpmeter",
+            CarriedTool.FirmnessMeter => "firmness meter",
+            _ => "",
+        };
 
         /// <summary>The last day on which the forecast was actually read (so a skip can catch you out).</summary>
         public int ForecastReadDay { get; private set; } = int.MinValue;
@@ -74,8 +81,31 @@ namespace Greenkeeper.Unity.Play
             if (putt != null) putt.enabled = !InRoom;
             if (inspection != null) inspection.enabled = !InRoom;
 
-            Focused = RaycastObject();
+            var hit = RaycastObject();
+            if (hit != Focused) { Highlight(Focused, false); Highlight(hit, true); Focused = hit; }
             if (Focused != null && UnityEngine.Input.GetKeyDown(useKey)) Use(Focused);
+        }
+
+        // Cube-grey is fine; a focus tint just makes "this is usable" instant (UX#6).
+        private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorProp = Shader.PropertyToID("_Color");
+        private MaterialPropertyBlock _mpb;
+        private void Highlight(DiegeticObject obj, bool on)
+        {
+            if (obj == null) return;
+            var r = obj.GetComponent<Renderer>();
+            if (r == null) return;
+            _mpb ??= new MaterialPropertyBlock();
+            r.GetPropertyBlock(_mpb);
+            if (on)
+            {
+                Color c = r.sharedMaterial != null && r.sharedMaterial.HasProperty(BaseColor)
+                    ? r.sharedMaterial.GetColor(BaseColor) : Color.gray;
+                Color hi = Color.Lerp(c, Color.white, 0.5f);
+                _mpb.SetColor(BaseColor, hi); _mpb.SetColor(ColorProp, hi);
+            }
+            else { _mpb.Clear(); }
+            r.SetPropertyBlock(_mpb);
         }
 
         private DiegeticObject RaycastObject()
@@ -88,16 +118,25 @@ namespace Greenkeeper.Unity.Play
 
         private void Use(DiegeticObject obj)
         {
-            if (obj.Kind == DiegeticKind.MoistureMeter)
+            CarriedTool asTool = ToolFor(obj.Kind);
+            if (asTool != CarriedTool.None)
             {
-                // Pure pickup ritual: grab it / set it back down. No panel — you read it out on the green.
-                CarryingMeter = !CarryingMeter;
+                // Pickup ritual: grab it / set it back down. No panel — you read it out on the green.
+                Tool = Tool == asTool ? CarriedTool.None : asTool;
                 return;
             }
             if (obj.Kind == DiegeticKind.Forecast) MarkForecastRead(); // reading is a deliberate act (§7)
             Open = obj;
             EnterUi(true);
         }
+
+        private static CarriedTool ToolFor(DiegeticKind k) => k switch
+        {
+            DiegeticKind.MoistureMeter => CarriedTool.MoistureMeter,
+            DiegeticKind.Stimpmeter => CarriedTool.Stimpmeter,
+            DiegeticKind.FirmnessMeter => CarriedTool.FirmnessMeter,
+            _ => CarriedTool.None,
+        };
 
         /// <summary>Close the open panel and return to walking the room.</summary>
         public void Close()

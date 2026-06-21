@@ -32,6 +32,8 @@ namespace Greenkeeper.Unity.UI
         private Vector2 _scrollMap, _scrollQueue, _scrollLog;
         private float _rejectFlashUntil;
         private Texture2D _white;
+        private AdvanceKind? _confirm;              // a week/month advance awaiting confirmation
+        private PeriodSummary _lastSummary;        // the end-of-period card to show after an advance
 
         private void Awake() { if (game == null) game = FindFirstObjectByType<GameManager>(); }
 
@@ -43,9 +45,11 @@ namespace Greenkeeper.Unity.UI
             int W = Screen.width, H = Screen.height;
             T.Ensure(Mathf.Clamp(H / 56, 13, 28));
 
-            if (room.PanelOpen) { DrawOpenPanel(W, H); return; }
-            if (room.InRoom) DrawRoomWalking(W, H);
+            if (room.PanelOpen) DrawOpenPanel(W, H);
+            else if (room.InRoom) DrawRoomWalking(W, H);
             // Out on the course, GreenkeeperHud owns the screen (status bar + putt meter + green reads).
+
+            if (_lastSummary != null) DrawSummaryCard(W, H); // overlay: what the advance did + why it stopped
         }
 
         // ---- walking the building: crosshair + the focus prompt + the depth-scaled loop hint ----
@@ -56,9 +60,8 @@ namespace Greenkeeper.Unity.UI
             var f = room.Focused;
             if (f != null)
             {
-                string verb = f.IsPickup
-                    ? (f.Kind == DiegeticKind.MoistureMeter && room.CarryingMeter ? "set down" : "pick up")
-                    : "use";
+                bool carryingThis = f.IsPickup && room.ToolName == ToolNameFor(f.Kind);
+                string verb = f.IsPickup ? (carryingThis ? "set down" : "pick up") : "use";
                 string label = string.IsNullOrEmpty(f.Label) ? f.Kind.ToString() : f.Label;
                 var r = new Rect(W / 2 - 190, H / 2 + 26, 380, 34);
                 GUILayout.BeginArea(r, T.Panel);
@@ -69,12 +72,19 @@ namespace Greenkeeper.Unity.UI
             // The maintenance building banner + the friction that scales with the depth dial (§0.4).
             GUILayout.BeginArea(new Rect(10, 10, 540, 96), T.Panel);
             GUILayout.Label($"MAINTENANCE BUILDING  ·  Day <b>{Day}</b> · {game.Director.Clock.Season}", T.Section);
-            GUILayout.Label(room.RoutineDelegated
-                ? "Routine is <b>delegated</b> — glance the crew board and run the day."
-                : "<b>Hands-on</b> — read the forecast, check the map, schedule on the calendar.", T.Dim);
-            if (room.CarryingMeter) GUILayout.Label("carrying the <b>moisture meter</b>", T.GoldText);
+            GUILayout.Label("Read the <b>map</b> (what needs you), the <b>forecast</b> (what's coming), then advance on the " +
+                            "<b>calendar</b>: a Day runs your plan, a Week/Month coasts and stops on trouble.", T.Dim);
+            if (room.Tool != CarriedTool.None) GUILayout.Label($"carrying the <b>{room.ToolName}</b>", T.GoldText);
             GUILayout.EndArea();
         }
+
+        private static string ToolNameFor(DiegeticKind k) => k switch
+        {
+            DiegeticKind.MoistureMeter => "moisture meter",
+            DiegeticKind.Stimpmeter => "stimpmeter",
+            DiegeticKind.FirmnessMeter => "firmness meter",
+            _ => "",
+        };
 
         // ---- a station's clean panel, centered ----
         private void DrawOpenPanel(int W, int H)
@@ -118,8 +128,10 @@ namespace Greenkeeper.Unity.UI
         // =================== COURSE MAP (keystone) ===================
         private void DrawCourseMap()
         {
+            DrawMorningBrief();
             GUILayout.Label("At-a-glance health across every surface — tells only (colour/stress), never hidden numbers. " +
                             "Pick a hole to route crew; walk out to find out WHAT'S wrong.", T.Dim);
+            DrawLegend();
             GUILayout.Space(4);
 
             // Column header
@@ -208,8 +220,83 @@ namespace Greenkeeper.Unity.UI
                 ("Rake bunkers", () => AddTask(TaskCatalog.RakeBunkers())));
 
             QueueFooter();
-            Row(("RESOLVE DAY (run my plan)", () => game.ResolveWindow()),
-                ("Clear queue", () => game.BeginWindow()));
+            DrawTimeControl();
+        }
+
+        // The ONLY time-advancement verbs (GDD §1): day / week / month, all interrupt-gated.
+        private void DrawTimeControl()
+        {
+            GUILayout.Space(4);
+            GUILayout.Label("ADVANCE TIME — the only way the clock moves (week/month stop early on trouble)", T.Section);
+            if (_confirm == null)
+            {
+                Row(("▶ Day (run my plan)", () => _lastSummary = game.Advance(AdvanceKind.Day)),
+                    ("▶▶ Week ▸", () => _confirm = AdvanceKind.Week),
+                    ("▶▶▶ Month ▸", () => _confirm = AdvanceKind.Month));
+                Row(("Clear queue", () => game.BeginWindow()));
+            }
+            else
+            {
+                var k = _confirm.Value;
+                int days = k == AdvanceKind.Week ? 7 : 30;
+                GUILayout.Label($"<b>{k}</b> — the crew runs the routine for up to {days} days; you'll STOP the " +
+                                "moment a crisis fires or a tournament is due.", T.Body);
+                if (game.Tournament?.Current != null)
+                {
+                    int du = game.Tournament.DaysUntilNext(Day);
+                    if (du >= 0 && du < days) GUILayout.Label($"<color=#{Hex(T.Gold)}>{game.Tournament.Current.Name} in {du}d — you'll stop there.</color>", T.Body);
+                }
+                if (!room.ForecastReadToday)
+                    GUILayout.Label($"<color=#{Hex(T.Clay)}>You haven't read the forecast.</color>", T.Body);
+                Row(($"Confirm — advance the {k}", () => { _lastSummary = game.Advance(k); _confirm = null; }),
+                    ("Cancel", () => _confirm = null));
+            }
+        }
+
+        // The end-of-period summary: the bite taken, why it stopped, and the consequences (UX#4 / §0.3).
+        private void DrawSummaryCard(int W, int H)
+        {
+            int pw = Mathf.Clamp((int)(W * 0.5f), 460, 720), ph = 320;
+            var s = _lastSummary;
+            GUILayout.BeginArea(new Rect((W - pw) / 2, (H - ph) / 2, pw, ph), T.Panel);
+            GUILayout.Label(s.Tournament != null ? "TOURNAMENT" : "TIME ADVANCED", T.Title);
+            GUILayout.Space(4);
+
+            if (s.Tournament != null)
+            {
+                var tr = s.Tournament;
+                GUILayout.Label($"<b>{tr.Name}</b> — <b>{tr.Grade}</b>  (score {tr.Score:0})", T.Section);
+                GUILayout.Label($"Stimp {tr.MeanStimp:0.0} (±{tr.StimpStdev:0.0}) · firmness {tr.MeanFirmness:0} · " +
+                                $"worst infection {tr.WorstInfection:0.#} · density {tr.MeanDensity:0}", T.Body);
+                GUILayout.Label($"prize {Money(tr.PrizeAwarded)} · reputation {tr.ReputationDelta:+0;-0}", T.Body);
+                GUILayout.Space(4);
+            }
+
+            GUILayout.Label($"Advanced <b>{s.DaysAdvanced}</b> day(s) ({s.Kind}).", T.Body);
+            GUILayout.Label(s.StoppedEarly
+                ? $"<color=#{Hex(T.Gold)}>Stopped early — {s.StopReason}</color>"
+                : "Completed the full period.", T.Body);
+
+            GUILayout.Space(6);
+            GUILayout.Label("CONSEQUENCES", T.Section);
+            GUILayout.Label($"Course condition {s.CondStart:0} → <b>{s.CondEnd:0}</b>  ({Delta(s.CondDelta)})", T.Body);
+            if (game.Economy != null)
+            {
+                GUILayout.Label($"Cash {Money(s.CashStart)} → {Money(s.CashEnd)}  ({Delta(s.CashDelta, true)})", T.Body);
+                GUILayout.Label($"Yesterday: {game.Economy.Latest.Rounds:0} rounds · net {Money(game.Economy.Latest.Net)}", T.Dim);
+            }
+
+            GUILayout.Space(8);
+            if (GUILayout.Button("OK", T.Button)) _pending = () => _lastSummary = null;
+            GUILayout.EndArea();
+        }
+
+        private string Delta(double v, bool money = false)
+        {
+            string col = v >= 0 ? Hex(T.Sage) : Hex(T.Clay);
+            string sign = v >= 0 ? "+" : "-";
+            string val = money ? $"{sign}${System.Math.Abs(v):N0}" : $"{v:+0.0;-0.0;0}";
+            return $"<color=#{col}>{val}</color>";
         }
 
         private void QueueFooter()
@@ -232,7 +319,7 @@ namespace Greenkeeper.Unity.UI
         // =================== CREW BOARD (depth dial + delegated run) ===================
         private void DrawCrewBoard()
         {
-            GUILayout.Label("The crew, the depth dial, and — on a delegated routine day — the one-glance run (§0.4).", T.Dim);
+            GUILayout.Label("The crew, how much an expert you are vs them, and what you delegate (§0.4 / §4.8).", T.Dim);
             GUILayout.Space(4);
             foreach (var c in game.Crew)
             {
@@ -241,9 +328,9 @@ namespace Greenkeeper.Unity.UI
             }
 
             GUILayout.Space(6);
-            GUILayout.Label("DEPTH DIAL", T.Section);
-            bool del = GUILayout.Toggle(room.RoutineDelegated, room.RoutineDelegated ? "Routine: DELEGATED (glance & run)" : "Routine: RECLAIMED (full ritual)", T.Toggle, GUILayout.Height(30));
-            if (del != room.RoutineDelegated) _pending = () => room.RoutineDelegated = del;
+            GUILayout.Label("DEPTH DIAL = how you advance time", T.Section);
+            GUILayout.Label("The dial isn't a switch — it's your choice of verb on the calendar: a <b>Day</b> is hands-on " +
+                            "(your plan, your reads); a <b>Week/Month</b> coasts on the delegated routine and stops on trouble.", T.Dim);
 
             GUILayout.Space(6);
             GUILayout.Label("ASSISTS (surfacing only — never the sim)", T.Section);
@@ -251,17 +338,19 @@ namespace Greenkeeper.Unity.UI
             if (assist != game.assistsEnabled) _pending = () => game.SetAssists(assist);
 
             GUILayout.Space(8);
-            if (room.RoutineDelegated)
-            {
-                if (!room.ForecastReadToday)
-                    GUILayout.Label($"<color=#{Hex(T.Clay)}>You haven't read the forecast today.</color>", T.Body);
-                Row(("RUN TODAY (delegated)", () => game.SkipRoutineDays(1)),
-                    ("SKIP quiet days →", () => game.SkipRoutineDays()));
-            }
-            else
-            {
-                GUILayout.Label("Reclaimed — schedule the day on the calendar, then Resolve there.", T.Dim);
-            }
+            GUILayout.Label("DELEGATE READINGS (information depth dial, §4.8)", T.Section);
+            var tech = game.ReadingTech;
+            bool del = GUILayout.Toggle(game.DelegateReadings,
+                game.DelegateReadings ? $"Readings: {tech?.Name ?? "tech"} runs them on a coast" : "Readings: you walk them yourself",
+                T.Toggle, GUILayout.Height(28));
+            if (del != game.DelegateReadings) _pending = () => game.DelegateReadings = del;
+            if (game.DelegateReadings && tech != null)
+                GUILayout.Label($"On a week/month, {tech.Name} reports the NUMBERS (moisture/soil/scout) to the clipboard at " +
+                                $"<b>conf {Delegation.StaffQuality(tech):0%}</b> — competent data, but never your eyes. " +
+                                "Walk a green yourself to catch the subtle tell a number misses.", T.Dim);
+
+            GUILayout.Space(6);
+            GUILayout.Label("Advance time on the calendar — Day (hands-on) / Week / Month (coast).", T.Dim);
         }
 
         // =================== NOAA FORECAST ===================
@@ -288,21 +377,53 @@ namespace Greenkeeper.Unity.UI
         // =================== SOIL CLIPBOARD ===================
         private void DrawClipboard()
         {
-            GUILayout.Label("Soil-test results you've earned (R on a green out on the course). Untested greens stay blank.", T.Dim);
+            GUILayout.Label("Soil reads (yours by hand, or tech-reported on a coast) and your green-speed / firmness " +
+                            "measurements. Tech reports the NUMBERS; the expert read still needs your own eyes.", T.Dim);
             GUILayout.Space(4);
+
+            // Tournament-morning confirmation: measured vs the agronomist's spec (§10).
+            var spec = game.Tournament?.Current;
+            if (spec != null)
+                GUILayout.Label($"<b>{spec.Name}</b> spec — Stimp {spec.StimpMin:0.0}-{spec.StimpMax:0.0} · firm {spec.FirmMin:0}-{spec.FirmMax:0} · " +
+                                $"max infection {spec.MaxInfection:0.#} · min density {spec.MinDensity:0}", T.GoldText);
+
             _scrollLog = GUILayout.BeginScrollView(_scrollLog, GUILayout.ExpandHeight(true));
             foreach (var g in game.Course.Greens)
             {
                 var obs = game.Legibility.Observe(g, Day);
                 GUILayout.BeginHorizontal();
-                GUILayout.Label($"<b>{g.Id}</b>", T.Body, GUILayout.Width(120));
+                GUILayout.Label($"<b>{g.Id}</b>", T.Body, GUILayout.Width(110));
+
+                // Soil
                 if (obs.SoilTested)
-                    GUILayout.Label($"N {obs.RevealedNitrogenPct:0.#} · K {obs.RevealedPotassiumPct:0.#} · Fe {obs.RevealedIronPct:0.#} · OM {obs.RevealedOrganicMatterPct:0.#}%", T.Body);
-                else
-                    GUILayout.Label("— not tested —", T.Dim);
+                {
+                    GUILayout.Label($"N {obs.RevealedNitrogenPct:0.#} · K {obs.RevealedPotassiumPct:0.#} · Fe {obs.RevealedIronPct:0.#} · OM {obs.RevealedOrganicMatterPct:0.#}%", T.Body, GUILayout.Width(300));
+                    if (game.TechReadConfidence.TryGetValue(g.Id, out double conf))
+                        GUILayout.Label($"<color=#{Hex(T.Gold)}>tech ±{conf:0%}</color>", T.Dim, GUILayout.Width(90));
+                    else
+                        GUILayout.Label("(you)", T.Dim, GUILayout.Width(90));
+                }
+                else GUILayout.Label("— not tested —", T.Dim, GUILayout.Width(390));
+
+                // Measured speed/firmness (this morning), with spec pass/fail colour when there's a spec.
+                double st = game.FreshStimp(g.Id), fm = game.FreshFirm(g.Id);
+                GUILayout.Label(MeasuredCell("Stimp", st, spec?.StimpMin, spec?.StimpMax, "0.0"), T.Body, GUILayout.Width(120));
+                GUILayout.Label(MeasuredCell("firm", fm, spec?.FirmMin, spec?.FirmMax, "0"), T.Body, GUILayout.Width(120));
                 GUILayout.EndHorizontal();
             }
             GUILayout.EndScrollView();
+            GUILayout.Label("Measure with the stimpmeter / firmness meter out on the greens (USE on the surface).", T.Dim);
+        }
+
+        private string MeasuredCell(string name, double v, double? lo, double? hi, string fmt)
+        {
+            if (double.IsNaN(v)) return $"<color=#{Hex(T.Dimmed)}>{name} —</color>";
+            if (lo.HasValue && hi.HasValue)
+            {
+                bool ok = v >= lo.Value && v <= hi.Value;
+                return $"<color=#{Hex(ok ? T.Sage : T.Clay)}>{name} {v.ToString(fmt)}</color>";
+            }
+            return $"{name} {v.ToString(fmt)}";
         }
 
         // =================== FERT / SPRAY LOG ===================
@@ -326,6 +447,73 @@ namespace Greenkeeper.Unity.UI
             var log = game.RecentLog;
             for (int i = log.Count - 1; i >= 0; i--) GUILayout.Label(log[i], T.Dim);
             GUILayout.EndScrollView();
+        }
+
+        // The triage line: what needs me + what's coming + what doing-nothing risks (UX#1). Tells only.
+        private void DrawMorningBrief()
+        {
+            int stressed = 0, worstHole = -1; double worstSev = -1;
+            foreach (var z in game.Course.Zones)
+            {
+                if (z.Type == ZoneType.Bunker) continue;
+                double sev = ZoneSeverity(z);
+                if (sev > 0.30) stressed++;
+                if (sev > worstSev) { worstSev = sev; worstHole = z.HoleNumber; }
+            }
+            var w = game.Window;
+            GUILayout.BeginVertical(T.Panel);
+            GUILayout.Label("MORNING BRIEF", T.Section);
+            GUILayout.Label(stressed > 0
+                ? $"<b>{stressed}</b> surface(s) showing stress" + (worstHole > 0 ? $" · worst around hole <b>#{worstHole}</b>" : "")
+                : "Nothing is showing stress this morning.", stressed > 0 ? T.Body : T.Dim);
+            GUILayout.Label($"Crew hours today: <b>{w.RemainingHours:0.#}</b> of {w.BudgetHours:0}", T.Body);
+            // Weather is a deliberate read (§7): the brief only surfaces the threat once you've read the sheet.
+            if (room.ForecastReadToday) GUILayout.Label(NextThreat(Day), T.Body);
+            else GUILayout.Label("Forecast unread — read the NOAA sheet on the desk.", T.Dim);
+            GUILayout.Label(stressed > 3
+                ? $"<color=#{Hex(T.Clay)}>Do nothing and greens will slide — attend the worst before you coast.</color>"
+                : "<color=#9CC196>Do-nothing risk is low — a coast is reasonable.</color>", T.Body);
+            GUILayout.EndVertical();
+            GUILayout.Space(4);
+        }
+
+        private string NextThreat(int day)
+        {
+            if (game.Forecast == null) return "No forecast service.";
+            foreach (var d in game.Forecast.Upcoming(day))
+            {
+                if (d.PredictedHeatSpike) return $"<color=#{Hex(T.Clay)}>Next threat: HEAT in +{d.DaysOut}d</color>";
+                if (d.PredictedStorm) return $"<color=#9CC0E8>Next threat: STORM in +{d.DaysOut}d</color>";
+                if (d.PredictedFrost) return $"<color=#BFE0EC>Next threat: FROST in +{d.DaysOut}d</color>";
+            }
+            return "<color=#9CC196>Forecast clear near-term.</color>";
+        }
+
+        private void DrawLegend()
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("Legend:", T.Dim, GUILayout.Width(64));
+            LegendSwatch(new Color(0.16f, 0.42f, 0.18f), "healthy");
+            LegendSwatch(new Color(0.55f, 0.62f, 0.30f), "pale/stressed");
+            LegendSwatch(new Color(0.72f, 0.64f, 0.40f), "disease");
+            LegendSwatch(new Color(0.34f, 0.26f, 0.18f), "thinning");
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+        }
+
+        private void LegendSwatch(Color c, string label)
+        {
+            var r = GUILayoutUtility.GetRect(16, 16, GUILayout.Width(16));
+            Chip(r, c, false);
+            GUILayout.Label(label, T.Dim, GUILayout.Width(96));
+        }
+
+        private double ZoneSeverity(ZoneState z)
+        {
+            var obs = game.Legibility.Observe(z, Day);
+            double worst = 0;
+            foreach (var t in obs.Tells) worst = System.Math.Max(worst, t.Lesions + t.Thinning + t.WiltTint);
+            return worst;
         }
 
         // ---- tells → colour (mirrors SurfaceRenderer; honest, gated) ----
@@ -417,5 +605,6 @@ namespace Greenkeeper.Unity.UI
 
         private static string Short(string id) => string.IsNullOrEmpty(id) ? "(all)" : id;
         private static string Hex(Color c) => ColorUtility.ToHtmlStringRGB(c);
+        private string Money(double v) => $"<color=#{Hex(v < 0 ? T.Clay : T.Sage)}><b>${v:N0}</b></color>";
     }
 }

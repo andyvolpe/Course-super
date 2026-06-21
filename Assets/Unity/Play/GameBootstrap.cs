@@ -856,15 +856,19 @@ namespace Greenkeeper.Unity.Play
             Station("CrewBoard", root, new Vector3(2.4f, 1.7f, -hz + wt / 2 + 0.03f), new Vector3(2.6f, 1.6f, 0.06f),
                     new Color(0.44f, 0.44f, 0.50f), DiegeticKind.CrewBoard, "Check the crew board");
 
-            // ---- desk items ----
-            Station("Forecast", root, new Vector3(deskX, deskTop, -0.9f), new Vector3(0.45f, 0.06f, 0.35f),
+            // ---- desk items ---- (readouts left, handheld tools right)
+            Station("Forecast", root, new Vector3(deskX, deskTop, -1.05f), new Vector3(0.45f, 0.06f, 0.32f),
                     new Color(0.80f, 0.78f, 0.70f), DiegeticKind.Forecast, "Read the NOAA forecast");
-            Station("SoilClipboard", root, new Vector3(deskX, deskTop, -0.3f), new Vector3(0.4f, 0.05f, 0.32f),
+            Station("SoilClipboard", root, new Vector3(deskX, deskTop, -0.63f), new Vector3(0.4f, 0.05f, 0.3f),
                     new Color(0.72f, 0.70f, 0.62f), DiegeticKind.SoilClipboard, "Read the soil clipboard");
-            Station("MoistureMeter", root, new Vector3(deskX, deskTop + 0.05f, 0.3f), new Vector3(0.18f, 0.12f, 0.3f),
-                    new Color(0.30f, 0.40f, 0.30f), DiegeticKind.MoistureMeter, "the moisture meter", pickup: true);
-            Station("FertLog", root, new Vector3(deskX, deskTop, 0.9f), new Vector3(0.42f, 0.07f, 0.32f),
+            Station("FertLog", root, new Vector3(deskX, deskTop, -0.21f), new Vector3(0.42f, 0.07f, 0.3f),
                     new Color(0.66f, 0.62f, 0.55f), DiegeticKind.FertLog, "Read the fert / spray log");
+            Station("MoistureMeter", root, new Vector3(deskX, deskTop + 0.05f, 0.27f), new Vector3(0.16f, 0.12f, 0.26f),
+                    new Color(0.30f, 0.40f, 0.30f), DiegeticKind.MoistureMeter, "the moisture meter", pickup: true);
+            Station("Stimpmeter", root, new Vector3(deskX, deskTop + 0.03f, 0.69f), new Vector3(0.12f, 0.08f, 0.5f),
+                    new Color(0.42f, 0.36f, 0.24f), DiegeticKind.Stimpmeter, "the stimpmeter", pickup: true);
+            Station("FirmnessMeter", root, new Vector3(deskX, deskTop + 0.06f, 1.05f), new Vector3(0.16f, 0.16f, 0.16f),
+                    new Color(0.34f, 0.34f, 0.40f), DiegeticKind.FirmnessMeter, "the firmness meter", pickup: true);
 
             // Wake up standing in the middle of the room, facing the doorway (+X).
             _roomSpawn = new Vector3(cx, floorY + 1.3f, cz);

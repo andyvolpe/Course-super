@@ -217,3 +217,51 @@ Built on top of the agronomy core; all pure C# and headless-tested.
 The Unity layer (`Assets/Unity/Rendering` + `Play` + `UI`) is a dumb consumer: the
 `GreenSurface` URP shader renders the per-cell tell channels, `GreenRenderer` pushes them
 through the gate (one material per sub-cell), and first-person inspection earns deeper reads.
+
+## Milestone B-prep — diegetic interface & player-facing UX (`Greenkeeper.Unity` only)
+
+Presentation-layer pass. **No `Greenkeeper.Sim` change and no balance change** — all 73 EditMode
+tests pass unchanged. The day starts in a placeholder maintenance building; you manage the course
+by walking to physical objects (`DiegeticObject` + `RoomInteractionController`) that open clean
+panels (`MaintenanceRoomHud`). Out on the course `GreenkeeperHud` owns the screen (status +
+on-green reads + putt/tool readout).
+
+### Time advancement — day / week / month (GDD §1)
+The **only** advancement verbs, on the wall calendar (`GameManager.Advance(AdvanceKind)` →
+`PeriodSummary`):
+- **Day** — resolves *your* queued plan (hands-on).
+- **Week (≤7) / Month (≤30)** — coast on the existing `AutoRoutinePlan`, **interrupt-gated**: stop
+  the instant `Director.InterruptRaised` fires (heat spike / storm / frost / flash drought / disease
+  break), and **clamped** so they never coast past an upcoming tournament (you stop the morning of).
+  Week/Month require a confirm; every advance ends in a legible **summary card** (days taken, the
+  early-stop reason, condition/cash deltas, and the tournament showcase when graded).
+- Maps to fidelity: day = hands-on, week = routine delegated/stop-on-trouble, month = coasting.
+
+### Reading delegation (information depth dial, GDD §3.2 + §4.8)
+On the crew board you can hand routine **readings** (moisture / soil / scout) to a tech. On a
+week/month coast the tech reads the most-suspicious greens (ranked by the **free visible tell**) via
+the same `LegibilitySystem` gate, so the **numbers** land on the clipboard without you walking each
+green. The **delegation-quality gap is honored in presentation**: data is flagged *tech-reported*
+with a skill-scaled **confidence**, **coverage scales with skill** (a weaker tech leaves greens for
+you), and the **expert read** — the per-cell nuance you get standing on the green — is never
+delegated. Walking a green by hand (or the on-green Scout/Meter/Soil buttons) clears the flag.
+
+### Physical measurement tools (GDD §3.2, load-bearing for §10)
+Carried handhelds (one at a time; `CarriedTool`): **moisture meter** (VWC), **stimpmeter** (green
+speed), **firmness meter** (receptivity). USE on a green performs the measured act; Stimp/firmness
+become **earned by measuring** (no longer printed). The soil clipboard shows **measured vs the
+tournament spec band** (pass/fail colour) for the tense morning-of confirmation.
+
+### UX fixes
+Morning brief + legend on the course map (what's stressed / hours / next forecast threat —
+forecast-gated per §7 / do-nothing risk); per-task queue costs; end-of-period & tournament showcase
+cards; focus-tint on interactables; confirm/preview on week/month.
+
+### Divergences (intentional, presentation-only)
+- **"Irrigation failure"** is not a sim interrupt, so week/month stops map to the existing interrupts
+  + the tournament-deadline clamp. A real irrigation-failure event would be a future *Sim* change.
+- **Reading-delegation quality gap** is a presentation construct (withhold the expert read; show
+  confidence; scale coverage), because the deterministic sim returns identical numbers regardless of
+  who reads — the only no-Sim-change way to honor §4.8.
+- The legacy debug HUDs (`DebugHud`, `MaintenanceWindowHud`) are **not in the auto-booted build** and
+  still expose the old `SkipRoutineDays`; the player-facing diegetic UI uses only day/week/month.

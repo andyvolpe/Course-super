@@ -57,20 +57,25 @@ namespace Greenkeeper.Unity.UI
             if (Plan) return;
             if (room != null && room.InRoom)
             {
-                if (room.CarryingMeter) DrawMeterBadge(W, H);
+                DrawToolBadge(W, H);
                 return;
             }
 
             if (inspection != null && !string.IsNullOrEmpty(inspection.AimedZoneId))
                 DrawContext(new Rect(W - rightW - 10, cTop, rightW, cBot - cTop));
             DrawCourseOverlay(W, H, foreH);
-            if (room != null && room.CarryingMeter) DrawMeterBadge(W, H);
+            DrawToolBadge(W, H);
         }
 
-        private void DrawMeterBadge(int W, int H)
+        // The handheld readout: what tool is in hand + the last measured value (clean, not a panel).
+        private void DrawToolBadge(int W, int H)
         {
-            GUI.Label(new Rect(W - 230, H / 2 + 24, 220, 26),
-                "<b>moisture meter</b> in hand — E on a green", T.GoldText);
+            if (room == null || room.Tool == Greenkeeper.Unity.Play.CarriedTool.None) return;
+            GUILayout.BeginArea(new Rect(W - 320, H / 2 + 22, 310, 60), T.Panel);
+            GUILayout.Label($"<b>{room.ToolName}</b> in hand — E to measure", T.GoldText);
+            if (inspection != null && !string.IsNullOrEmpty(inspection.LastToolReadout))
+                GUILayout.Label(inspection.LastToolReadout, T.Body);
+            GUILayout.EndArea();
         }
 
         private void DrawTopBar(int W, int topH)
@@ -146,9 +151,9 @@ namespace Greenkeeper.Unity.UI
                 : "nutrients — unknown", obs.SoilTested ? T.Body : T.Dim);
             if (obs.TurfDebtShown) GUILayout.Label($"<color=#{Hex(T.Clay)}>turf debt {obs.TurfDebtPct:0}</color>", T.Body);
             if (obs.ThreatTelegraphed) GUILayout.Label($"<color=#{Hex(T.Gold)}>{obs.ThreatNote}</color>", T.Body);
-            Row(("Scout", () => game.Legibility.Scout(id, Day)),
-                ("Meter", () => game.Legibility.MeterReading(zone, cell, Day)),
-                ("Soil test", () => game.Legibility.SoilTest(id, Day)));
+            Row(("Scout", () => { game.Legibility.Scout(id, Day); game.MarkPlayerRead(id); }),
+                ("Meter", () => { game.Legibility.MeterReading(zone, cell, Day); game.MarkPlayerRead(id); }),
+                ("Soil test", () => { game.Legibility.SoilTest(id, Day); game.MarkPlayerRead(id); }));
 
             GUILayout.Space(2);
             GUILayout.Label("ADD FOR THIS SURFACE", T.Section);

@@ -30,6 +30,8 @@ namespace Greenkeeper.Unity.Play
         public string AimedZoneId { get; private set; }
         public int AimedCellIndex { get; private set; }
         public float LastMeterReading { get; private set; } = float.NaN;
+        /// <summary>A clean one-line readout of the last measurement act, for the handheld HUD badge.</summary>
+        public string LastToolReadout { get; private set; } = "";
 
         private void Awake()
         {
@@ -43,13 +45,37 @@ namespace Greenkeeper.Unity.Play
             if (AimedZoneId == null) return;
             int day = game.Director.Clock.DayIndex;
 
-            if (UnityEngine.Input.GetKeyDown(meterKey) && (room == null || room.CarryingMeter))
+            // USE performs whatever measurement tool is in hand (moisture / stimp / firmness).
+            if (UnityEngine.Input.GetKeyDown(meterKey)) UseCarriedTool(day);
+            // Scouting / soil-testing by HAND is the expert read — it clears the tech-reported flag.
+            if (UnityEngine.Input.GetKeyDown(scoutKey)) { game.Legibility.Scout(AimedZoneId, day); game.MarkPlayerRead(AimedZoneId); }
+            if (UnityEngine.Input.GetKeyDown(soilTestKey)) { game.Legibility.SoilTest(AimedZoneId, day); game.MarkPlayerRead(AimedZoneId); }
+        }
+
+        private void UseCarriedTool(int day)
+        {
+            ZoneState z = game.Course.Get(AimedZoneId);
+            if (z == null) return;
+            CarriedTool tool = room != null ? room.Tool : CarriedTool.None;
+            switch (tool)
             {
-                ZoneState z = game.Course.Get(AimedZoneId);
-                if (z != null) LastMeterReading = (float)game.Legibility.MeterReading(z, AimedCellIndex, day);
+                case CarriedTool.MoistureMeter:
+                    LastMeterReading = (float)game.Legibility.MeterReading(z, AimedCellIndex, day);
+                    game.MarkPlayerRead(AimedZoneId);
+                    LastToolReadout = $"moisture {LastMeterReading:0.#}% · {AimedZoneId} cell {AimedCellIndex}";
+                    break;
+                case CarriedTool.Stimpmeter:
+                    game.RecordStimp(z.Id, z.Stimp);
+                    LastToolReadout = $"green speed {z.Stimp:0.0} ft · {z.Id}";
+                    break;
+                case CarriedTool.FirmnessMeter:
+                    game.RecordFirm(z.Id, z.FirmnessPct);
+                    LastToolReadout = $"firmness {z.FirmnessPct:0}/100 · {z.Id}";
+                    break;
+                default:
+                    LastToolReadout = "no tool in hand — pick one up in the building";
+                    break;
             }
-            if (UnityEngine.Input.GetKeyDown(scoutKey)) game.Legibility.Scout(AimedZoneId, day);
-            if (UnityEngine.Input.GetKeyDown(soilTestKey)) game.Legibility.SoilTest(AimedZoneId, day);
         }
 
         private void ResolveAim()
