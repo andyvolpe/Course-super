@@ -60,25 +60,14 @@ namespace Greenkeeper.Unity.Play
             Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
             if (!Physics.Raycast(ray, out RaycastHit hit, reach, greenMask)) return;
 
-            // A green? Resolve which sub-cell was hit (greens are spatially resolved).
-            var gr = hit.collider.GetComponentInParent<GreenRenderer>();
-            if (gr != null)
-            {
-                AimedZoneId = gr.zoneId;
-                for (int i = 0; i < gr.cellRenderers.Length; i++)
-                {
-                    if (gr.cellRenderers[i] != null && hit.collider.gameObject == gr.cellRenderers[i].gameObject)
-                    {
-                        AimedCellIndex = i;
-                        break;
-                    }
-                }
-                return;
-            }
-
-            // Otherwise any other surface (fairway/tee/approach/rough/bunker) is a single zone.
+            // Any surface (incl. greens) is a SurfaceRenderer. Greens map the hit point to a 3x3 sub-cell
+            // so scouting/metering is still spatially resolved.
             var sr = hit.collider.GetComponent<SurfaceRenderer>();
-            if (sr != null) AimedZoneId = sr.zoneId;
+            if (sr != null)
+            {
+                AimedZoneId = sr.zoneId;
+                AimedCellIndex = sr.CellIndexAt(hit.point);
+            }
         }
     }
 }

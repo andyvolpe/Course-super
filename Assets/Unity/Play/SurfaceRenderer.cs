@@ -17,6 +17,10 @@ namespace Greenkeeper.Unity.Play
         public GameManager game;
         public string zoneId;
 
+        /// <summary>Set for green meshes: enables worst-cell colouring + hit→sub-cell mapping for scouting.</summary>
+        public bool spatialGreen;
+        public Vector2 greenHalf = Vector2.one; // local XZ half-extents of the green mesh
+
         private Renderer _r;
         private MaterialPropertyBlock _mpb;
         private int _lastDay = -1; // colours only change when the sim day advances — recompute then only
@@ -28,6 +32,16 @@ namespace Greenkeeper.Unity.Play
             if (game == null) game = FindFirstObjectByType<GameManager>();
             _r = GetComponent<Renderer>();
             _mpb = new MaterialPropertyBlock();
+        }
+
+        /// <summary>Map a world point on this green to a 3x3 sub-cell index (for scouting/metering).</summary>
+        public int CellIndexAt(Vector3 worldPoint)
+        {
+            if (!spatialGreen) return 0;
+            Vector3 lp = transform.InverseTransformPoint(worldPoint);
+            int col = Mathf.Clamp(Mathf.FloorToInt((lp.x / Mathf.Max(0.01f, greenHalf.x) * 0.5f + 0.5f) * 3f), 0, 2);
+            int row = Mathf.Clamp(Mathf.FloorToInt((lp.z / Mathf.Max(0.01f, greenHalf.y) * 0.5f + 0.5f) * 3f), 0, 2);
+            return row * 3 + col;
         }
 
         private void LateUpdate()
@@ -49,8 +63,19 @@ namespace Greenkeeper.Unity.Play
             }
             else
             {
-                ObservableZone obs = game.Legibility.Observe(zone, game.Director.Clock.DayIndex);
-                TellAppearance t = obs.Tells.Length > 0 ? obs.Tells[0] : default;
+                ObservableZone obs = game.Legibility.Observe(zone, day);
+                // For a green, show the WORST sub-cell so a partly-sick green still reads as sick.
+                int idx = 0;
+                if (spatialGreen && obs.Tells.Length > 1)
+                {
+                    double worst = -1;
+                    for (int i = 0; i < obs.Tells.Length; i++)
+                    {
+                        double sev = obs.Tells[i].Lesions + obs.Tells[i].Thinning;
+                        if (sev > worst) { worst = sev; idx = i; }
+                    }
+                }
+                TellAppearance t = obs.Tells.Length > 0 ? obs.Tells[idx] : default;
                 c = new Color((float)t.BaseColor.R, (float)t.BaseColor.G, (float)t.BaseColor.B, 1f);
                 c = Color.Lerp(c, new Color(0.55f, 0.60f, 0.58f), (float)t.WiltTint * 0.6f);   // dry wilt
                 c = Color.Lerp(c, c * 0.6f, (float)t.WetSheen);                                 // wet sheen

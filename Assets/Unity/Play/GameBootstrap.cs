@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Greenkeeper.Unity.Managers;
@@ -8,9 +9,10 @@ namespace Greenkeeper.Unity.Play
 {
     /// <summary>
     /// One-component playable bootstrap. Drop this on an empty GameObject in an empty scene and press
-    /// Play — it assembles the whole fun-core at runtime: the GameManager (sim), a couple of tilted
-    /// greens rendered as 3x3 sub-cell grids that read the sim's tells, a first-person Player that can
-    /// walk / inspect / putt, a ball + cup, and every HUD wired up. No hand-wiring, no prefabs.
+    /// Play — it assembles the whole fun-core at runtime: the GameManager (sim), 18 holes built from
+    /// ORGANIC procedural meshes (curved fairways/rough, kidney greens, blob bunkers, pins, trees) that
+    /// read the sim's tells, a first-person Player that can walk / inspect / play, a ball + cup that
+    /// move hole to hole, and every HUD wired up. No hand-wiring, no prefabs.
     ///
     /// Controls (shown on screen): TAB toggles Plan mode (free cursor, click the morning window) and
     /// Course mode (mouse-look + walk + putt). WASD move; LMB hold = putt, RMB hold = approach;
@@ -61,12 +63,12 @@ namespace Greenkeeper.Unity.Play
                 if (_game == null || _game.Course == null) { _error = "GameManager/course failed to build."; return; }
 
                 _treePrefab = Resources.Load<GameObject>("PolyHaven/Tree"); // optional CC0 tree model
-                var greens = new System.Collections.Generic.List<GreenRenderer>();
+                var holesViz = new List<HoleViz>();
                 int holes = Mathf.Max(1, holesToRender);
                 // Snaking grid routing: rows of 6 holes, alternate rows face back the other way (like a
                 // real out-and-back nine), so the course reads as a field of holes you can walk between.
                 const int cols = 6;
-                const float laneW = 26f, rowD = 62f;
+                const float laneW = 30f, rowD = 64f;
                 for (int i = 0; i < holes; i++)
                 {
                     int hole = i + 1;
@@ -76,17 +78,17 @@ namespace Greenkeeper.Unity.Play
                     float x = (back ? (cols - 1 - col) : col) * laneW;
                     float z = row * rowD;
                     float yaw = back ? 180f : 0f;          // back rows point -Z
-                    var gr = BuildHole(hole, new Vector3(x, 0f, z), yaw);
-                    if (gr != null) greens.Add(gr);
+                    var hv = BuildHole(hole, new Vector3(x, 0f, z), yaw);
+                    if (hv != null) holesViz.Add(hv);
                 }
 
                 var (player, cam) = BuildPlayer();
-                BuildBallAndCup(player, cam, greens.Count > 0 ? greens[0] : null);
+                BuildBallAndCup(player, holesViz);
                 BuildHuds(player);
 
                 SetPlanMode(true);
-                Debug.Log($"[Bootstrap] scene built: {_game.Course.Zones.Count} zones, {greens.Count} holes rendered " +
-                          "(tee/fairway/approach/green/rough/bunkers). TAB to walk; hold LMB to putt.");
+                Debug.Log($"[Bootstrap] scene built: {_game.Course.Zones.Count} zones, {holesViz.Count} holes rendered " +
+                          "(organic tee/fairway/approach/green/rough/bunkers + pins). TAB to walk; hold LMB to play.");
             }
             catch (System.Exception e)
             {
@@ -126,10 +128,10 @@ namespace Greenkeeper.Unity.Play
             ground.name = "Ground";
             // Big enough to sit under the whole snaking grid (6 lanes x ceil(holes/6) rows).
             int rows = Mathf.CeilToInt(Mathf.Max(1, holesToRender) / 6f);
-            float centerX = (6 - 1) * 26f * 0.5f;
-            float centerZ = ((rows - 1) * 62f + 40f) * 0.5f;
-            ground.transform.position = new Vector3(centerX, -0.05f, centerZ);
-            ground.transform.localScale = new Vector3(34f, 1f, 34f); // 340m x 340m — covers all 18 holes
+            float centerX = (6 - 1) * 30f * 0.5f;
+            float centerZ = ((rows - 1) * 64f + 46f) * 0.5f;
+            ground.transform.position = new Vector3(centerX, -0.06f, centerZ);
+            ground.transform.localScale = new Vector3(40f, 1f, 40f); // 400m x 400m — covers all 18 holes
             var mat = SurfaceMat("Ground", new Color(0.24f, 0.32f, 0.16f), 340f, 340f); // Poly Haven ground texture if present
             if (mat != null) ground.GetComponent<Renderer>().material = mat;
         }
@@ -144,127 +146,171 @@ namespace Greenkeeper.Unity.Play
             return game;
         }
 
-        // ---- holes (all surfaces) ----
+        // ---- holes (organic, all surfaces) ----
+
+        private sealed class HoleViz { public Transform Green; public Vector3 TeeWorld; public Vector3 CupWorld; }
 
         /// <summary>
-        /// Lays out one whole hole in the world — rough pad, tee, fairway, approach, bunkers, and the
-        /// 3x3 green at the far end — each quad driven by its sim zone via SurfaceRenderer/GreenRenderer.
+        /// Lays out one whole hole from ORGANIC procedural meshes: a curved rough corridor and fairway
+        /// (a dogleg spline), a rounded tee, an apron + kidney green, blob bunkers, a pin, and trees —
+        /// each surface driven by its sim zone via SurfaceRenderer.
         /// </summary>
-        private GreenRenderer BuildHole(int hole, Vector3 rootPos, float yawDeg)
+        private HoleViz BuildHole(int hole, Vector3 rootPos, float yawDeg)
         {
             string h = hole.ToString("00");
-
-            // Each hole is a single rotatable root, so holes can face different ways with no seams.
             var root = new GameObject($"Hole_{h}");
             root.transform.position = rootPos;
             root.transform.rotation = Quaternion.Euler(0f, yawDeg, 0f);
             var T = root.transform;
 
-            // Deterministic per-hole character: length, dogleg, green tilt.
             var rnd = new System.Random(hole * 9176 + 13);
-            float lengthF = 0.85f + 0.35f * (float)rnd.NextDouble();
-            float dogleg = (float)(rnd.NextDouble() * 2.0 - 1.0) * 6f;   // green offset left/right
-            float tilt = 2.5f + 3.5f * (float)rnd.NextDouble();          // green slope (break)
-            float greenZ = 34f * lengthF;
-            float fairLen = greenZ - 12f;
-            float fairCz = 6f + fairLen * 0.5f;
+            float R() => (float)rnd.NextDouble();
 
-            // Native rough pad under everything (the miss-penalty surface you maintain).
-            BuildSurfaceQuad(T, $"rough-{h}", "Rough", new Vector3(dogleg * 0.35f, -0.03f, greenZ * 0.5f + 3f),
-                             20f, greenZ + 14f, new Color(0.22f, 0.34f, 0.14f));
+            float length = 30f + 16f * R();
+            float side = R() < 0.5f ? -1f : 1f;
+            float bend = (3f + 7f * R()) * side;   // dogleg
 
-            // Playing corridor: tee -> fairway (drifts toward the dogleg) -> widening approach.
-            if (_game.Course.Get($"tee-{h}") != null)
-                BuildSurfaceQuad(T, $"tee-{h}", "Tee", new Vector3(0f, 0f, 2f), 4f, 5f, new Color(0.18f, 0.44f, 0.18f));
-            if (_game.Course.Get($"fairway-{h}") != null)
-                BuildSurfaceQuad(T, $"fairway-{h}", "Fairway", new Vector3(dogleg * 0.30f, 0f, fairCz), 9f, fairLen, new Color(0.20f, 0.42f, 0.18f));
-            if (_game.Course.Get($"approach-{h}") != null)
-                BuildSurfaceQuad(T, $"approach-{h}", "Approach", new Vector3(dogleg * 0.7f, 0f, greenZ - 4.5f), 8f, 5f, new Color(0.17f, 0.43f, 0.17f));
-
-            // Bunkering: two greenside (flanking the green) + an optional fairway bunker on the corner.
-            BuildBunkerIfExists($"bunker-{h}-1", T, new Vector3(dogleg + 5f, -0.02f, greenZ - 1f));
-            BuildBunkerIfExists($"bunker-{h}-2", T, new Vector3(dogleg - 5f, -0.02f, greenZ - 2f));
-            BuildBunkerIfExists($"bunker-{h}-3", T, new Vector3(dogleg * 0.5f + 5.5f, -0.02f, fairCz + fairLen * 0.2f));
-
-            // The green at the far end (3x3 sub-cell renderer; ball/cup live on hole 1's green).
-            var gr = BuildGreen($"green-{h}", T, new Vector3(dogleg, 0f, greenZ), tilt);
-            gr.game = _game;
-
-            ScatterTrees(T, hole, greenZ); // optional Poly Haven trees, well off the playing line
-            return gr;
-        }
-
-        private void ScatterTrees(Transform parent, int hole, float greenZ)
-        {
-            if (_treePrefab == null) return;
-            var rnd = new System.Random(hole * 2237 + 5);
-            int n = 4 + rnd.Next(0, 4);
-            for (int i = 0; i < n; i++)
+            // Curved centreline (local XZ; +z up the hole), smoothed to a polyline.
+            var ctrl = new List<Vector2>
             {
-                float side = (i % 2 == 0) ? 1f : -1f;           // alternate sides
-                float x = side * (9f + 4f * (float)rnd.NextDouble());  // outside the ±4.5m corridor
-                float z = 2f + (greenZ + 6f) * (float)rnd.NextDouble();
-                var tree = Instantiate(_treePrefab, parent);
-                tree.transform.localPosition = new Vector3(x, 0f, z);
-                tree.transform.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f);
-                float sc = 0.8f + 0.6f * (float)rnd.NextDouble();
-                tree.transform.localScale = Vector3.one * sc;
+                new Vector2(0f, 0f),
+                new Vector2(bend * 0.25f, length * 0.35f),
+                new Vector2(bend, length * 0.72f),
+                new Vector2(bend * 0.95f, length),
+            };
+            var center = ProcMesh.Smooth(ctrl, 6);
+            int m = center.Count;
+
+            // Half-widths bulge in the middle (narrow tee + green).
+            var fairHalf = new float[m];
+            var roughHalf = new float[m];
+            for (int i = 0; i < m; i++)
+            {
+                float t = i / (float)(m - 1);
+                float w = Mathf.Max(2.6f, Mathf.Lerp(3.0f, 5.2f, Mathf.Sin(t * Mathf.PI)));
+                fairHalf[i] = w;
+                roughHalf[i] = w + 6.5f;
             }
+
+            // Rough corridor (slightly sunk) then fairway on top.
+            BuildMesh(T, $"rough-{h}", "Rough", ProcMesh.Ribbon(center, roughHalf, 2f), -0.04f, new Color(0.20f, 0.32f, 0.13f));
+            if (_game.Course.Get($"fairway-{h}") != null)
+                BuildMesh(T, $"fairway-{h}", "Fairway", ProcMesh.Ribbon(center, fairHalf, 2f), 0f, new Color(0.22f, 0.44f, 0.18f));
+
+            // Tee box.
+            Vector2 teeP = center[0];
+            if (_game.Course.Get($"tee-{h}") != null)
+                BuildBlob(T, $"tee-{h}", "Tee", teeP, ProcMesh.EllipseRadii(2.4f, 3.0f, 18, 0.10f, hole * 31 + 1, 0f), 0.01f, new Color(0.20f, 0.46f, 0.20f));
+
+            // Green complex: apron, then a kidney green with a gentle tilt for break.
+            Vector2 greenP = center[m - 1];
+            if (_game.Course.Get($"approach-{h}") != null)
+            {
+                Vector2 apr = Vector2.Lerp(center[m - 2], greenP, 0.35f);
+                BuildBlob(T, $"approach-{h}", "Approach", apr, ProcMesh.EllipseRadii(4.5f, 3.5f, 20, 0.10f, hole * 53 + 7, 0f), 0.006f, new Color(0.20f, 0.45f, 0.19f));
+            }
+            float gx = 4.2f + 1.2f * R(), gz = 4.8f + 1.4f * R();
+            var greenObj = BuildBlob(T, $"green-{h}", "Green", greenP,
+                ProcMesh.EllipseRadii(gx, gz, 26, 0.08f, hole * 71 + 3, 0.22f), 0.03f, new Color(0.16f, 0.42f, 0.16f));
+            var gsr = greenObj.GetComponent<SurfaceRenderer>();
+            gsr.spatialGreen = true; gsr.greenHalf = new Vector2(gx, gz);
+            greenObj.transform.localRotation = Quaternion.Euler(2.5f + 3.0f * R(), 30f * R(), 0f); // break
+
+            // Bunkers (organic blobs): two greenside, one on the inside of the dogleg.
+            Vector2 perp = Perp(center[m - 1] - center[m - 2]);
+            BuildBunker($"bunker-{h}-1", T, greenP + perp * (gx + 2.5f) + new Vector2(0f, -1.5f), hole * 11 + 1);
+            BuildBunker($"bunker-{h}-2", T, greenP - perp * (gx + 2.5f) + new Vector2(0f, -2.5f), hole * 11 + 2);
+            int ci = Mathf.Clamp(Mathf.RoundToInt(m * 0.6f), 1, m - 2);
+            BuildBunker($"bunker-{h}-3", T, center[ci] - Perp(center[ci + 1] - center[ci - 1]) * (fairHalf[ci] + 2f) * side, hole * 11 + 3);
+
+            // Pin + cup at the green.
+            Vector3 cupLocal = new Vector3(greenP.x, 0.03f, greenP.y);
+            BuildPin(T, cupLocal);
+
+            ScatterTrees(T, hole, center, roughHalf);
+
+            return new HoleViz
+            {
+                Green = greenObj.transform,
+                TeeWorld = T.TransformPoint(new Vector3(teeP.x, 0.06f, teeP.y)),
+                CupWorld = T.TransformPoint(cupLocal),
+            };
         }
 
-        private void BuildBunkerIfExists(string zoneId, Transform parent, Vector3 localCenter)
+        private static Vector2 Perp(Vector2 d)
+        {
+            d = d.sqrMagnitude > 1e-6f ? d.normalized : Vector2.up;
+            return new Vector2(-d.y, d.x);
+        }
+
+        private void BuildBunker(string zoneId, Transform parent, Vector2 p, int seed)
         {
             if (_game.Course.Get(zoneId) == null) return;
-            BuildSurfaceQuad(parent, zoneId, "Bunker", localCenter, 3.4f, 3.4f, new Color(0.82f, 0.74f, 0.55f));
+            float br = 1.4f + 0.8f * (float)new System.Random(seed).NextDouble();
+            BuildBlob(parent, zoneId, "Bunker", p, ProcMesh.EllipseRadii(br, br * 0.8f, 16, 0.18f, seed, 0f), -0.015f, new Color(0.82f, 0.74f, 0.55f));
         }
 
-        private GameObject BuildSurfaceQuad(Transform parent, string zoneId, string matKey, Vector3 localCenter, float sizeX, float sizeZ, Color baseColor)
+        /// <summary>A rounded blob surface (green/tee/approach/bunker) centred at a local XZ point.</summary>
+        private GameObject BuildBlob(Transform parent, string zoneId, string matKey, Vector2 localCenter, float[] radii, float y, Color color)
+            => BuildMeshAt(parent, zoneId, matKey, ProcMesh.Blob(radii, 2f), new Vector3(localCenter.x, y, localCenter.y), color);
+
+        /// <summary>A ribbon surface (fairway/rough) whose verts already live in hole-local space.</summary>
+        private GameObject BuildMesh(Transform parent, string zoneId, string matKey, Mesh mesh, float y, Color color)
+            => BuildMeshAt(parent, zoneId, matKey, mesh, new Vector3(0f, y, 0f), color);
+
+        private GameObject BuildMeshAt(Transform parent, string zoneId, string matKey, Mesh mesh, Vector3 localPos, Color color)
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Plane); // faces +Y, has MeshCollider (walkable)
-            go.name = $"Surf_{zoneId}";
+            var go = new GameObject($"Surf_{zoneId}");
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = localCenter;
-            go.transform.localScale = new Vector3(sizeX / 10f, 1f, sizeZ / 10f); // Plane is 10x10 at scale 1
-            var mr = go.GetComponent<Renderer>();
-            var mat = SurfaceMat(matKey, baseColor, sizeX, sizeZ); // Poly Haven texture if present, else flat colour
-            if (mat != null) mr.material = mat;
+            go.transform.localPosition = localPos;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = SharedSurfaceMaterial(matKey, color);
+            go.AddComponent<MeshCollider>().sharedMesh = mesh; // walkable + ball/look raycast target
             var sr = go.AddComponent<SurfaceRenderer>();
             sr.game = _game;
             sr.zoneId = zoneId;
             return go;
         }
 
-        // ---- greens ----
-
-        private GreenRenderer BuildGreen(string zoneId, Transform parent, Vector3 localCenter, float tiltDeg)
+        private void BuildPin(Transform parent, Vector3 localBase)
         {
-            var holeGreen = new GameObject($"Green_{zoneId}");
-            holeGreen.transform.SetParent(parent, false);
-            holeGreen.transform.localPosition = localCenter;
-            holeGreen.transform.localRotation = Quaternion.Euler(tiltDeg, 17f * (zoneId.GetHashCode() % 5), 0f); // tilt -> break
+            var pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            pole.name = "Pin";
+            Destroy(pole.GetComponent<Collider>());
+            pole.transform.SetParent(parent, false);
+            pole.transform.localPosition = localBase + new Vector3(0f, 0.9f, 0f);
+            pole.transform.localScale = new Vector3(0.03f, 0.9f, 0.03f); // ~1.8 m flagstick
+            var pm = SolidMaterial(new Color(0.92f, 0.92f, 0.92f)); if (pm != null) pole.GetComponent<Renderer>().material = pm;
 
-            var gr = holeGreen.AddComponent<GreenRenderer>();
-            gr.zoneId = zoneId;
-            gr.cellRenderers = new Renderer[9];
+            var flag = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            flag.name = "Flag";
+            Destroy(flag.GetComponent<Collider>());
+            flag.transform.SetParent(parent, false);
+            flag.transform.localPosition = localBase + new Vector3(0.28f, 1.62f, 0f);
+            flag.transform.localScale = new Vector3(0.55f, 0.35f, 1f);
+            flag.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+            var fm = SolidMaterial(new Color(0.85f, 0.12f, 0.14f)); if (fm != null) flag.GetComponent<Renderer>().material = fm;
+        }
 
-            // Poly Haven "Green" turf if present (shared across this green's 9 cells), else flat colour.
-            Material greenMat = SurfaceMat("Green", new Color(0.16f, 0.42f, 0.16f), cellSizeM, cellSizeM);
-            float s = cellSizeM;
-            for (int r = 0; r < 3; r++)
+        private void ScatterTrees(Transform parent, int hole, List<Vector2> center, float[] roughHalf)
+        {
+            if (_treePrefab == null) return;
+            var rnd = new System.Random(hole * 2237 + 5);
+            int m = center.Count;
+            for (int i = 1; i < m; i += 2)
             {
-                for (int c = 0; c < 3; c++)
+                Vector2 perp = Perp(center[Mathf.Min(m - 1, i + 1)] - center[Mathf.Max(0, i - 1)]);
+                for (int s = -1; s <= 1; s += 2)
                 {
-                    var cell = GameObject.CreatePrimitive(PrimitiveType.Plane); // faces +Y, has MeshCollider
-                    cell.name = $"{zoneId}_cell{r * 3 + c}";
-                    cell.transform.SetParent(holeGreen.transform, false);
-                    cell.transform.localScale = new Vector3(s / 10f, 1f, s / 10f); // Plane is 10x10 at scale 1
-                    cell.transform.localPosition = new Vector3((c - 1) * s, 0f, (r - 1) * s);
-                    var mr = cell.GetComponent<Renderer>();
-                    if (greenMat != null) mr.material = greenMat; // per-renderer MPB set by GreenRenderer
-                    gr.cellRenderers[r * 3 + c] = mr;
+                    if (rnd.NextDouble() < 0.45) continue;
+                    float off = roughHalf[i] + 1.5f + 3f * (float)rnd.NextDouble();
+                    Vector2 p = center[i] + perp * off * s;
+                    var tree = Instantiate(_treePrefab, parent);
+                    tree.transform.localPosition = new Vector3(p.x, 0f, p.y);
+                    tree.transform.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f);
+                    tree.transform.localScale = Vector3.one * (0.8f + 0.6f * (float)rnd.NextDouble());
                 }
             }
-            return gr;
         }
 
         // ---- player ----
@@ -295,29 +341,32 @@ namespace Greenkeeper.Unity.Play
             return (player, cam);
         }
 
-        private void BuildBallAndCup(GameObject player, Camera cam, GreenRenderer firstGreen)
+        private void BuildBallAndCup(GameObject player, List<HoleViz> holes)
         {
-            if (firstGreen == null) return;
-            Vector3 greenCenter = firstGreen.transform.position;
-            Vector3 up = firstGreen.transform.up;
+            if (holes.Count == 0) return;
 
             var ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             ball.name = "Ball";
             ball.transform.localScale = Vector3.one * 0.12f;
-            ball.transform.position = greenCenter + up * 0.08f - firstGreen.transform.forward * 1.5f;
-            Destroy(ball.GetComponent<Collider>()); // ball is kinematic-animated, no physics collider needed
+            Destroy(ball.GetComponent<Collider>()); // ball is kinematic-animated
             var ballMat = SolidMaterial(Color.white); if (ballMat != null) ball.GetComponent<Renderer>().material = ballMat;
 
             var cup = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cup.name = "Cup";
-            cup.transform.localScale = new Vector3(0.10f, 0.02f, 0.10f);
-            cup.transform.position = greenCenter + up * 0.02f + firstGreen.transform.forward * 1.5f;
+            cup.transform.localScale = new Vector3(0.11f, 0.02f, 0.11f);
             Destroy(cup.GetComponent<Collider>());
             var cupMat = SolidMaterial(Color.black); if (cupMat != null) cup.GetComponent<Renderer>().material = cupMat;
+
+            var tees = new Vector3[holes.Count];
+            var cups = new Vector3[holes.Count];
+            for (int i = 0; i < holes.Count; i++) { tees[i] = holes[i].TeeWorld; cups[i] = holes[i].CupWorld; }
 
             var putt = player.GetComponent<PuttingController>();
             putt.ball = ball.transform;
             putt.cup = cup.transform;
+            putt.teePositions = tees;
+            putt.cupPositions = cups;
+            putt.SetHole(0); // tee up on hole 1
         }
 
         // ---- HUDs ----
@@ -400,6 +449,13 @@ namespace Greenkeeper.Unity.Play
             if (m.HasProperty("_BaseMap")) m.SetTextureScale("_BaseMap", scale); // URP lit
             m.mainTextureScale = scale;                  // Built-in / fallback
             return m;
+        }
+
+        /// <summary>Shared material for a procedural-mesh surface (UVs carry the tiling; colour set per-renderer via MPB).</summary>
+        private static Material SharedSurfaceMaterial(string key, Color color)
+        {
+            var loaded = LoadSurfaceMaterial(key);
+            return loaded != null ? loaded : SolidMaterial(color);
         }
 
         /// <summary>

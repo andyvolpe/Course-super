@@ -235,13 +235,14 @@ namespace Greenkeeper.Unity.UI
             GUI.Label(new Rect(W / 2 - 5, H / 2 - 12, 16, 24), "<b>+</b>", T.GoldText);
             if (putt == null) return;
             bool onGreen = string.IsNullOrEmpty(putt.LieNote) || putt.LieNote == "on the green";
-            GUILayout.BeginArea(new Rect(W / 2 - 150, H - foreH - 96, 300, 86), T.Panel);
-            GUILayout.Label($"Strokes <b>{putt.Strokes}</b>{(putt.Holed ? "   <color=#9CC196>HOLED!</color>" : "")}", T.Body);
+            GUILayout.BeginArea(new Rect(W / 2 - 150, H - foreH - 104, 300, 94), T.Panel);
+            GUILayout.Label($"Hole <b>{putt.HoleNumber}</b>   ·   Strokes <b>{putt.Strokes}</b>" +
+                (putt.Holed ? "   <color=#9CC196>HOLED — N: next</color>" : ""), T.Body);
             if (!string.IsNullOrEmpty(putt.LieNote))
                 GUILayout.Label($"lie: <b>{putt.LieNote}</b>", T.Body);
             var br = GUILayoutUtility.GetRect(10, 16, GUILayout.ExpandWidth(true));
             T.Bar(br, putt.Power, "");
-            string idle = (onGreen ? "hold LMB putt · RMB approach" : "hold LMB swing · RMB pitch") + " · B drop ball";
+            string idle = (onGreen ? "hold LMB putt · RMB approach" : "hold LMB swing · RMB pitch") + " · B drop · N next";
             string busy = putt.ApproachMode ? (onGreen ? "approach — release" : "pitch — release") : (onGreen ? "putt — release" : "swing — release");
             GUILayout.Label(putt.Charging ? busy : idle, T.Dim);
             GUILayout.EndArea();

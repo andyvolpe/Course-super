@@ -30,8 +30,15 @@ namespace Greenkeeper.Unity.Play
         public KeyCode chargeKey = KeyCode.Mouse0;     // hold to build power, release to strike
         public KeyCode approachKey = KeyCode.Mouse1;   // hold for a short approach instead of a putt
         public KeyCode dropKey = KeyCode.B;            // drop the ball where you're looking (test any lie)
+        public KeyCode nextHoleKey = KeyCode.N;        // advance to the next hole's tee
         public float chargeRate = 0.6f;                // power per second while held
         public float worldFeet = 0.3048f;              // metres per foot (sim works in feet)
+
+        [Header("Round")]
+        public Vector3[] teePositions;                 // per-hole tee + cup, set by the bootstrap
+        public Vector3[] cupPositions;
+        public int HoleIndex { get; private set; }
+        public int HoleNumber => HoleIndex + 1;
 
         [Header("Full shot (off the green)")]
         public float fullShotMaxFt = 240f;             // a maxed full swing from a clean lie
@@ -71,6 +78,9 @@ namespace Greenkeeper.Unity.Play
                 Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
                 if (Physics.Raycast(ray, out RaycastHit drop, 80f)) { ball.position = drop.point + Vector3.up * 0.06f; Holed = false; }
             }
+
+            // Advance to the next hole (always available; the natural move once you've holed out).
+            if (UnityEngine.Input.GetKeyDown(nextHoleKey)) { NextHole(); return; }
 
             if (UnityEngine.Input.GetKeyDown(chargeKey)) { _charging = true; _approachMode = false; Power = 0f; }
             if (UnityEngine.Input.GetKeyDown(approachKey)) { _charging = true; _approachMode = true; Power = 0f; }
@@ -182,7 +192,17 @@ namespace Greenkeeper.Unity.Play
             return null;
         }
 
-        public void NextHole() { Strokes = 0; Holed = false; }
+        /// <summary>Tee up on a specific hole: move the ball to its tee and the cup to its green.</summary>
+        public void SetHole(int index)
+        {
+            if (teePositions == null || teePositions.Length == 0) { Strokes = 0; Holed = false; return; }
+            HoleIndex = ((index % teePositions.Length) + teePositions.Length) % teePositions.Length;
+            if (ball != null) ball.position = teePositions[HoleIndex] + Vector3.up * 0.06f;
+            if (cup != null && cupPositions != null && HoleIndex < cupPositions.Length) cup.position = cupPositions[HoleIndex];
+            Strokes = 0; Holed = false;
+        }
+
+        public void NextHole() => SetHole(HoleIndex + 1);
 
         // Exposed for the unified HUD to render the meter (no separate OnGUI panel).
         public bool Charging => _charging;
