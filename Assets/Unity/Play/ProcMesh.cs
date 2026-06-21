@@ -95,6 +95,39 @@ namespace Greenkeeper.Unity.Play
                  + (-p0 + 3f * p1 - 3f * p2 + p3) * t3);
         }
 
+        /// <summary>A subdivided grid mesh whose vertex heights come from <paramref name="h"/> (world XZ).</summary>
+        public static Mesh HeightGrid(float minX, float minZ, float maxX, float maxZ, float step, System.Func<float, float, float> h, float tile)
+        {
+            int nx = Mathf.Max(2, Mathf.CeilToInt((maxX - minX) / step) + 1);
+            int nz = Mathf.Max(2, Mathf.CeilToInt((maxZ - minZ) / step) + 1);
+            var verts = new Vector3[nx * nz];
+            var uv = new Vector2[nx * nz];
+            for (int j = 0; j < nz; j++)
+                for (int i = 0; i < nx; i++)
+                {
+                    float x = Mathf.Lerp(minX, maxX, i / (float)(nx - 1));
+                    float z = Mathf.Lerp(minZ, maxZ, j / (float)(nz - 1));
+                    int idx = j * nx + i;
+                    verts[idx] = new Vector3(x, h(x, z), z);
+                    uv[idx] = new Vector2(x / tile, z / tile);
+                }
+            var tris = new List<int>((nx - 1) * (nz - 1) * 6);
+            for (int j = 0; j < nz - 1; j++)
+                for (int i = 0; i < nx - 1; i++)
+                {
+                    int a = j * nx + i, b = j * nx + i + 1, c = (j + 1) * nx + i, d = (j + 1) * nx + i + 1;
+                    tris.Add(a); tris.Add(c); tris.Add(b);
+                    tris.Add(b); tris.Add(c); tris.Add(d);
+                }
+            var mesh = new Mesh { name = "HeightGrid", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            mesh.SetVertices(new List<Vector3>(verts));
+            mesh.SetTriangles(tris, 0);
+            mesh.uv = uv;
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
         private static Mesh Build(List<Vector3> verts, List<int> tris, float tile)
         {
             // Force up-facing winding (so the lit side is the top) regardless of how the caller wound it.
