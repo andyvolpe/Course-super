@@ -98,7 +98,10 @@ sim-driven meshes. The splat layers pull their textures from your `Resources/Pol
 `Fairway`, and `Ground` materials if present (else flat colours), so importing those improves the
 ground automatically. If Terrain creation fails for any reason it falls back to the old mesh ground.
 
-Still a follow-up: **detail (geometry) grass** on the Terrain — ask and I'll add a grass detail layer.
+Geometry grass: the Terrain now carries a **detail grass layer** in the rough + surrounds (real
+camera-facing grass blades), masked OFF the greens/fairways/tees/bunkers so blades never grow on the
+short surfaces. It uses a generated grass-blade billboard, so it needs no imported asset; it waves in
+a light wind. Density is clumpy (Perlin noise).
 
 ## Grass that doesn't look obviously tiled
 

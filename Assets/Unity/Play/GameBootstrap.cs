@@ -29,6 +29,9 @@ namespace Greenkeeper.Unity.Play
 
         private GameManager _game;
         private Terrain _terrain;          // Unity Terrain ground (null => mesh-ground fallback)
+        private float _terrMinX, _terrMinZ, _terrW = 1f, _terrL = 1f;
+        private float[,] _grassMask;       // [z,x]; 1 = short maintained surface — keep tall grass OFF it
+        private const int GrassMaskRes = 384;
         private GameObject[] _treePrefabs; // real tree models from Resources/Trees/* (+ Resources/PolyHaven/Tree)
         private Material _trunkMat;        // shared so hundreds of trees don't spawn thousands of materials
         private Material[] _canopyMats;
@@ -96,6 +99,9 @@ namespace Greenkeeper.Unity.Play
                 // (mesh ground, or terrain but no tree models) scatter our own so it's never barren.
                 if (_terrain == null || _treePrefabs == null || _treePrefabs.Length == 0)
                     BuildPerimeterTrees(maxXForTrees: (6 - 1) * 30f, maxZForTrees: ((holes + 5) / 6 - 1) * 64f + 50f);
+
+                // Real geometry grass across the rough + surrounds (after holes so the mask is filled).
+                if (_terrain != null) ApplyGrassDetail(_terrain);
 
                 var (player, cam) = BuildPlayer();
                 BuildBallAndCup(player, holesViz);
@@ -174,6 +180,8 @@ namespace Greenkeeper.Unity.Play
         private Terrain BuildTerrain()
         {
             BuildBounds(out float minX, out float minZ, out float width, out float length);
+            _terrMinX = minX; _terrMinZ = minZ; _terrW = width; _terrL = length;
+            _grassMask = new float[GrassMaskRes, GrassMaskRes]; // filled while holes are built
             const float minY = -10f, sizeY = 20f;
 
             var data = new TerrainData { heightmapResolution = 257 };
@@ -257,6 +265,102 @@ namespace Greenkeeper.Unity.Play
                 });
             }
             terrain.terrainData.SetTreeInstances(list.ToArray(), true);
+        }
+
+        // ---- detail (geometry) grass on the Terrain ----
+
+        /// <summary>Mark a world-space disc as a short maintained surface (no tall grass grows there).</summary>
+        private void StampGrassMask(float wx, float wz, float radius)
+        {
+            if (_grassMask == null) return;
+            float u = (wx - _terrMinX) / _terrW, v = (wz - _terrMinZ) / _terrL;
+            int cx = Mathf.RoundToInt(u * (GrassMaskRes - 1)), cz = Mathf.RoundToInt(v * (GrassMaskRes - 1));
+            int rx = Mathf.CeilToInt(radius / _terrW * GrassMaskRes);
+            int rz = Mathf.CeilToInt(radius / _terrL * GrassMaskRes);
+            for (int dz = -rz; dz <= rz; dz++)
+                for (int dx = -rx; dx <= rx; dx++)
+                {
+                    int x = cx + dx, z = cz + dz;
+                    if (x < 0 || z < 0 || x >= GrassMaskRes || z >= GrassMaskRes) continue;
+                    if ((dx / (float)Mathf.Max(1, rx)) * (dx / (float)Mathf.Max(1, rx)) +
+                        (dz / (float)Mathf.Max(1, rz)) * (dz / (float)Mathf.Max(1, rz)) <= 1f)
+                        _grassMask[z, x] = 1f;
+                }
+        }
+
+        /// <summary>Paint detail (geometry) grass across the rough + surrounds, off the short surfaces.</summary>
+        private void ApplyGrassDetail(Terrain terrain)
+        {
+            if (_grassMask == null) return;
+            try
+            {
+                var data = terrain.terrainData;
+                int res = 256;
+                data.SetDetailResolution(res, 16);
+                data.detailPrototypes = new[]
+                {
+                    new DetailPrototype
+                    {
+                        prototypeTexture = MakeGrassBillboardTex(),
+                        renderMode = DetailRenderMode.GrassBillboard,
+                        healthyColor = new Color(0.42f, 0.58f, 0.30f),
+                        dryColor = new Color(0.55f, 0.55f, 0.32f),
+                        minWidth = 0.5f, maxWidth = 1.1f, minHeight = 0.3f, maxHeight = 0.8f,
+                        noiseSpread = 0.4f,
+                    },
+                };
+                var map = new int[res, res];
+                for (int z = 0; z < res; z++)
+                    for (int x = 0; x < res; x++)
+                    {
+                        float u = x / (res - 1f), v = z / (res - 1f);
+                        int mx = Mathf.Clamp(Mathf.RoundToInt(u * (GrassMaskRes - 1)), 0, GrassMaskRes - 1);
+                        int mz = Mathf.Clamp(Mathf.RoundToInt(v * (GrassMaskRes - 1)), 0, GrassMaskRes - 1);
+                        if (_grassMask[mz, mx] > 0.5f) { map[z, x] = 0; continue; } // short surface — no tall grass
+                        float wx = _terrMinX + u * _terrW, wz = _terrMinZ + v * _terrL;
+                        float n = Mathf.PerlinNoise(wx * 0.09f + 5f, wz * 0.09f + 9f);
+                        map[z, x] = n > 0.42f ? Mathf.RoundToInt(n * 7f) : 0; // clumpy
+                    }
+                data.SetDetailLayer(0, 0, 0, map);
+                terrain.detailObjectDistance = 160f;
+                data.wavingGrassStrength = 0.35f;
+                data.wavingGrassSpeed = 0.5f;
+                data.wavingGrassAmount = 0.3f;
+                data.wavingGrassTint = new Color(0.7f, 0.75f, 0.5f, 1f);
+            }
+            catch (System.Exception e) { Debug.LogWarning("[Bootstrap] detail grass skipped: " + e.Message); }
+        }
+
+        /// <summary>A small grass-tuft billboard (a few alpha'd green blades on transparent background).</summary>
+        private static Texture2D MakeGrassBillboardTex()
+        {
+            const int S = 64;
+            var t = new Texture2D(S, S, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var px = new Color[S * S];
+            for (int i = 0; i < px.Length; i++) px[i] = new Color(0, 0, 0, 0);
+            var rnd = new System.Random(7);
+            int blades = 7;
+            for (int b = 0; b < blades; b++)
+            {
+                int baseX = 6 + rnd.Next(S - 12);
+                int top = 30 + rnd.Next(28);
+                float lean = (float)(rnd.NextDouble() - 0.5) * 10f;
+                for (int y = 2; y < top; y++)
+                {
+                    float ty = (y - 2f) / (top - 2f);
+                    int w = Mathf.Max(0, Mathf.RoundToInt(1.6f * (1f - ty))); // taper to a point
+                    int cx = baseX + Mathf.RoundToInt(lean * ty);
+                    var col = Color.Lerp(new Color(0.13f, 0.30f, 0.10f), new Color(0.34f, 0.52f, 0.22f), ty);
+                    for (int dx = -w; dx <= w; dx++)
+                    {
+                        int x = cx + dx;
+                        if (x < 0 || x >= S) continue;
+                        px[y * S + x] = col;
+                    }
+                }
+            }
+            t.SetPixels(px); t.Apply();
+            return t;
         }
 
         private static Texture2D TexOrColor(string key, Color fallback)
@@ -384,6 +488,16 @@ namespace Greenkeeper.Unity.Play
 
             Vector3 teeWorld = T.TransformPoint(new Vector3(teeP.x, 0f, teeP.y));
             float teeSurfaceY = SurfaceGroundY(teeWorld.x, teeWorld.z) + 0.04f;
+
+            // Keep tall detail grass OFF the short maintained surfaces (fairway corridor, tee, green).
+            for (int i = 0; i < m; i++)
+            {
+                Vector3 w = T.TransformPoint(new Vector3(center[i].x, 0f, center[i].y));
+                StampGrassMask(w.x, w.z, fairHalf[i] + 1f);
+            }
+            StampGrassMask(teeWorld.x, teeWorld.z, 3.5f);
+            StampGrassMask(greenWorld.x, greenWorld.z, Mathf.Max(gx, gz) + 1.5f);
+
             return new HoleViz
             {
                 Green = greenObj.transform,
@@ -403,6 +517,8 @@ namespace Greenkeeper.Unity.Play
             if (_game.Course.Get(zoneId) == null) return;
             float br = 1.4f + 0.8f * (float)new System.Random(seed).NextDouble();
             BuildBlob(parent, zoneId, "Bunker", p, ProcMesh.EllipseRadii(br, br * 0.8f, 24, 0.16f, seed, 0f), -0.04f, new Color(0.82f, 0.74f, 0.55f));
+            Vector3 bw = parent.TransformPoint(new Vector3(p.x, 0f, p.y));
+            StampGrassMask(bw.x, bw.z, br + 0.6f); // no tall grass in the sand
         }
 
         /// <summary>A rounded blob surface (green/tee/approach/bunker) centred at a local XZ point.</summary>
