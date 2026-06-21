@@ -81,14 +81,14 @@ namespace Greenkeeper.Unity.EditorTools
                     .Select(AssetDatabase.GUIDToAssetPath).Distinct().ToList();
                 string[] grassWords = { "grass", "lawn", "meadow", "turf", "field", "green" };
                 string[] dirtWords = { "dirt", "soil", "ground", "path", "mud", "gravel", "sand", "forest", "rock" };
-                var grass = tls.Where(p => grassWords.Any(p.ToLower().Contains)).ToList();
-                var dirt = tls.Where(p => dirtWords.Any(p.ToLower().Contains)).ToList();
+                var grassLayers = tls.Where(p => grassWords.Any(p.ToLower().Contains)).ToList();
+                var dirtLayers = tls.Where(p => dirtWords.Any(p.ToLower().Contains)).ToList();
                 // Map grass-like layers to Rough/Fairway; a dirt-like one to Ground. Skip if none match
                 // (so we never put a dirt texture down as the base "grass").
-                if (grass.Count > 0) layers += CopyLayer(grass[0], "Rough", sb);
-                if (grass.Count > 0) layers += CopyLayer(grass.Count > 1 ? grass[1] : grass[0], "Fairway", sb);
-                if (dirt.Count > 0) layers += CopyLayer(dirt[0], "Ground", sb);
-                if (grass.Count == 0) sb.AppendLine("  (no grass-named TerrainLayer found — leaving the green fallback)");
+                if (grassLayers.Count > 0) layers += CopyLayer(grassLayers[0], "Rough", sb);
+                if (grassLayers.Count > 0) layers += CopyLayer(grassLayers.Count > 1 ? grassLayers[1] : grassLayers[0], "Fairway", sb);
+                if (dirtLayers.Count > 0) layers += CopyLayer(dirtLayers[0], "Ground", sb);
+                if (grassLayers.Count == 0) sb.AppendLine("  (no grass-named TerrainLayer found — leaving the green fallback)");
             }
 
             AssetDatabase.Refresh();
