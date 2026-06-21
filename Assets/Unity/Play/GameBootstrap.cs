@@ -600,11 +600,11 @@ namespace Greenkeeper.Unity.Play
             // The TERRAIN itself is the rough (uniform grass + scattered tufts), so we don't draw a second
             // opaque rough mesh on top of it (that read as a dark patchwork). We still build the rough
             // surface as a COLLIDER-ONLY object so the ball/lie system can tell you're in the rough.
-            var roughGo = BuildMesh(T, $"rough-{h}", "Rough", ProcMesh.Ribbon(center, roughHalf, 5f), 0.0f, new Color(0.20f, 0.32f, 0.13f));
+            var roughGo = BuildMesh(T, $"rough-{h}", "Rough", ProcMesh.Ribbon(center, roughHalf, 9f), 0.0f, new Color(0.20f, 0.32f, 0.13f));
             var roughMr = roughGo.GetComponent<MeshRenderer>();
             if (roughMr != null) roughMr.enabled = false; // collider + SurfaceRenderer stay; terrain shows through
             if (_game.Course.Get($"fairway-{h}") != null)
-                BuildMesh(T, $"fairway-{h}", "Fairway", ProcMesh.Ribbon(center, fairHalf, 5f), 0.02f, new Color(0.22f, 0.44f, 0.18f));
+                BuildMesh(T, $"fairway-{h}", "Fairway", ProcMesh.Ribbon(center, fairHalf, 9f), 0.02f, new Color(0.22f, 0.44f, 0.18f));
 
             // Tee box (~7.3 x 11 m).
             Vector2 teeP = center[0];
@@ -679,7 +679,7 @@ namespace Greenkeeper.Unity.Play
 
         /// <summary>A rounded blob surface (green/tee/approach/bunker) centred at a local XZ point.</summary>
         private GameObject BuildBlob(Transform parent, string zoneId, string matKey, Vector2 localCenter, float[] radii, float lift, Color color)
-            => BuildMeshAt(parent, zoneId, matKey, ProcMesh.Blob(radii, 4f), new Vector3(localCenter.x, 0f, localCenter.y), lift, color);
+            => BuildMeshAt(parent, zoneId, matKey, ProcMesh.Blob(radii, 9f), new Vector3(localCenter.x, 0f, localCenter.y), lift, color);
 
         /// <summary>A ribbon surface (fairway/rough) whose verts already live in hole-local space.</summary>
         private GameObject BuildMesh(Transform parent, string zoneId, string matKey, Mesh mesh, float lift, Color color)
@@ -1093,11 +1093,13 @@ namespace Greenkeeper.Unity.Play
             Texture2D tex;
             switch (key)
             {
-                case "Green":    tex = TurfTexture(11, new Color(0.92f, 0.92f, 0.92f), 0.06f, 22, 0.05f); break; // fine, tight stripes
-                case "Fairway":  tex = TurfTexture(22, new Color(0.90f, 0.90f, 0.90f), 0.11f, 40, 0.11f); break; // mow stripes
-                case "Tee":      tex = TurfTexture(33, new Color(0.90f, 0.90f, 0.90f), 0.10f, 30, 0.08f); break;
-                case "Approach": tex = TurfTexture(44, new Color(0.90f, 0.90f, 0.90f), 0.10f, 34, 0.08f); break;
-                default:         tex = TurfTexture(55, new Color(0.88f, 0.88f, 0.88f), 0.22f, 0, 0f); break;     // rough/ground: mottled
+                // No in-texture mow stripes: a repeating texture can't stripe without forming a grid. Just
+                // fine seamless grain (finer/cleaner on greens, coarser/mottled on rough).
+                case "Green":    tex = TurfTexture(11, new Color(0.92f, 0.92f, 0.92f), 0.05f, 0, 0f); break;
+                case "Fairway":  tex = TurfTexture(22, new Color(0.90f, 0.90f, 0.90f), 0.08f, 0, 0f); break;
+                case "Tee":      tex = TurfTexture(33, new Color(0.90f, 0.90f, 0.90f), 0.08f, 0, 0f); break;
+                case "Approach": tex = TurfTexture(44, new Color(0.90f, 0.90f, 0.90f), 0.08f, 0, 0f); break;
+                default:         tex = TurfTexture(55, new Color(0.88f, 0.88f, 0.88f), 0.18f, 0, 0f); break;     // rough/ground
             }
             var m = new Material(LitShader());
             if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
@@ -1116,13 +1118,32 @@ namespace Greenkeeper.Unity.Play
             const int S = 256;
             var t = new Texture2D(S, S, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, name = "turf" };
             var px = new Color[S * S];
+            const float F = 5f; // feature cycles across the tile
+
+            // SEAMLESS value noise: blend the noise with its wrapped copies so tile edges match (no grid
+            // of seams when the texture repeats across a surface).
+            float Tile(float fx, float fy)
+            {
+                float n00 = Mathf.PerlinNoise(fx * F + seed, fy * F + seed);
+                float n10 = Mathf.PerlinNoise((fx - 1f) * F + seed, fy * F + seed);
+                float n01 = Mathf.PerlinNoise(fx * F + seed, (fy - 1f) * F + seed);
+                float n11 = Mathf.PerlinNoise((fx - 1f) * F + seed, (fy - 1f) * F + seed);
+                return Mathf.Lerp(Mathf.Lerp(n00, n10, fx), Mathf.Lerp(n01, n11, fx), fy);
+            }
+
             for (int y = 0; y < S; y++)
             {
-                float stripe = stripePx > 0 ? ((y / stripePx) % 2 == 0 ? 1f : 1f - stripeStr) : 1f;
+                // Optional mow bands: an INTEGER number across the tile so they stay seamless when repeated.
+                float stripe = 1f;
+                if (stripePx > 0)
+                {
+                    int bands = Mathf.Max(1, S / (2 * stripePx));
+                    stripe = (Mathf.FloorToInt(y / (float)S * bands * 2f) % 2 == 0) ? 1f : 1f - stripeStr;
+                }
                 for (int x = 0; x < S; x++)
                 {
-                    float mott = Mathf.PerlinNoise(x * 0.06f + seed, y * 0.06f + seed);
-                    float k = Mathf.Clamp01(1f + (mott - 0.5f) * variation) * stripe;
+                    float fine = Tile(x / (float)S, y / (float)S);
+                    float k = Mathf.Clamp01(1f + (fine - 0.5f) * variation) * stripe;
                     px[y * S + x] = new Color(baseColor.r * k, baseColor.g * k, baseColor.b * k, 1f);
                 }
             }
