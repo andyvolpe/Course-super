@@ -37,6 +37,12 @@ target surface key, and hit Import. It downloads the maps from Poly Haven's CDN,
 saves it straight to `Assets/Resources/PolyHaven/<Key>.mat`, where the play test auto-loads it.
 Needs internet; everything it writes is normal project assets you then commit (see Git LFS below).
 
+It handles all three kinds:
+- **Texture** → a lit material at `Resources/PolyHaven/<SurfaceKey>.mat`.
+- **HDRI** → `Resources/PolyHaven/Skybox.mat`.
+- **Model** → downloads the **FBX** (native Unity import, no extra package) + its textures and builds
+  `Resources/PolyHaven/<PrefabKey>.prefab` (default `Tree`), which the scene scatters off the corridors.
+
 The manual steps below do the same thing by hand if you'd rather.
 
 ## Steps

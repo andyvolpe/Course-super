@@ -1,6 +1,8 @@
 #if UNITY_EDITOR
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -22,12 +24,13 @@ namespace Greenkeeper.Unity.EditorTools
             { "Green", "Approach", "Fairway", "Tee", "Rough", "Bunker", "Ground" };
         private static readonly string[] Resolutions = { "1k", "2k", "4k" };
 
-        private enum Kind { Texture, HDRI }
+        private enum Kind { Texture, HDRI, Model }
 
         private string _slug = "aerial_grass_rock";
         private int _res = 1;        // index into Resolutions (2k)
         private Kind _kind = Kind.Texture;
         private int _keyIndex = 2;   // Fairway
+        private string _modelKey = "Tree";
         private string _status = "";
 
         [MenuItem("Window/Greenkeeper/Poly Haven Importer")]
@@ -37,8 +40,9 @@ namespace Greenkeeper.Unity.EditorTools
         {
             EditorGUILayout.LabelField("Poly Haven asset importer (CC0)", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "Paste a slug from polyhaven.com (the URL tail, e.g. 'aerial_grass_rock' or " +
-                "'kloofendal_43d_clear'). Downloads maps, builds a material into Resources/PolyHaven/.",
+                "Paste a slug from polyhaven.com (the URL tail, e.g. 'aerial_grass_rock', " +
+                "'hausdorf_clear_sky', or a model like 'grass_medium_01'). Texture -> material, " +
+                "HDRI -> skybox, Model -> FBX prefab — saved into Resources/PolyHaven/.",
                 MessageType.Info);
 
             _slug = EditorGUILayout.TextField("Slug", _slug).Trim();
@@ -47,15 +51,18 @@ namespace Greenkeeper.Unity.EditorTools
 
             if (_kind == Kind.Texture)
                 _keyIndex = EditorGUILayout.Popup("Surface key", _keyIndex, SurfaceKeys);
-            else
+            else if (_kind == Kind.HDRI)
                 EditorGUILayout.LabelField("Saves as", "Resources/PolyHaven/Skybox.mat");
+            else
+                _modelKey = EditorGUILayout.TextField("Prefab key", _modelKey);
 
             EditorGUILayout.Space();
             using (new EditorGUI.DisabledScope(string.IsNullOrEmpty(_slug)))
                 if (GUILayout.Button("Import", GUILayout.Height(30)))
                 {
                     if (_kind == Kind.Texture) ImportTexture(_slug, Resolutions[_res], SurfaceKeys[_keyIndex]);
-                    else ImportHdri(_slug, Resolutions[_res]);
+                    else if (_kind == Kind.HDRI) ImportHdri(_slug, Resolutions[_res]);
+                    else ImportModel(_slug, Resolutions[_res], string.IsNullOrEmpty(_modelKey) ? "Tree" : _modelKey.Trim());
                 }
 
             if (!string.IsNullOrEmpty(_status))
@@ -128,7 +135,85 @@ namespace Greenkeeper.Unity.EditorTools
             finally { EditorUtility.ClearProgressBar(); }
         }
 
+        // ---- model -> prefab -----------------------------------------------------------
+
+        private void ImportModel(string slug, string res, string key)
+        {
+            string assetDir = $"Assets/Art/PolyHaven/{slug}";
+            EnsureDir(assetDir);
+            try
+            {
+                // The model's file list (FBX url + texture includes) comes from the Poly Haven API.
+                EditorUtility.DisplayProgressBar("Poly Haven", "Fetching file list…", 0.15f);
+                string json = FetchText($"https://api.polyhaven.com/files/{slug}");
+                if (json == null) { Fail("Couldn't reach the Poly Haven API for the file list."); return; }
+
+                string fbxUrl = PickUrl(json, @"https://[^""]+\.fbx", res);
+                if (fbxUrl == null) { Fail("No FBX found for this slug — is it actually a model?"); return; }
+
+                string fbxAsset = $"{assetDir}/{Path.GetFileName(fbxUrl)}";
+                EditorUtility.DisplayProgressBar("Poly Haven", "Downloading FBX…", 0.4f);
+                if (!Download(fbxUrl, fbxAsset)) { Fail("FBX download failed."); return; }
+
+                // Textures at this resolution — Unity remaps the FBX's materials to these by name.
+                var imgs = AllUrls(json, @"https://[^""]+\.(?:png|jpg|jpeg)", res);
+                int i = 0;
+                foreach (var img in imgs)
+                {
+                    EditorUtility.DisplayProgressBar("Poly Haven", $"Downloading textures ({++i}/{imgs.Count})…", 0.5f + 0.4f * i / Mathf.Max(1, imgs.Count));
+                    Download(img, $"{assetDir}/{Path.GetFileName(img)}");
+                }
+                AssetDatabase.Refresh();
+
+                var fbx = Load<GameObject>(fbxAsset);
+                if (fbx == null) { Fail("FBX imported but couldn't be loaded."); return; }
+
+                EnsureDir("Assets/Resources"); EnsureDir("Assets/Resources/PolyHaven");
+                string prefabPath = $"Assets/Resources/PolyHaven/{key}.prefab";
+                if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null) AssetDatabase.DeleteAsset(prefabPath);
+                var inst = (GameObject)PrefabUtility.InstantiatePrefab(fbx);
+                PrefabUtility.SaveAsPrefabAsset(inst, prefabPath);
+                Object.DestroyImmediate(inst);
+                AssetDatabase.SaveAssets();
+
+                EditorGUIUtility.PingObject(AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath));
+                Done($"Imported model '{slug}' ({res}) → {prefabPath}\n{imgs.Count} texture(s). It scatters off the playing corridors on Play.");
+            }
+            catch (System.Exception e) { Fail("Import failed: " + e.Message); }
+            finally { EditorUtility.ClearProgressBar(); }
+        }
+
         // ---- helpers -------------------------------------------------------------------
+
+        private static string FetchText(string url)
+        {
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                using (var wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "GreenkeeperEditor/1.0 (+polyhaven import)");
+                    return wc.DownloadString(url);
+                }
+            }
+            catch (WebException) { return null; }
+        }
+
+        /// <summary>All distinct URLs in the JSON matching the pattern, preferring the chosen resolution.</summary>
+        private static List<string> AllUrls(string json, string pattern, string res)
+        {
+            var all = new List<string>();
+            foreach (Match m in Regex.Matches(json, pattern))
+                if (!all.Contains(m.Value)) all.Add(m.Value);
+            var atRes = all.FindAll(u => u.Contains($"/{res}/") || u.Contains($"_{res}"));
+            return atRes.Count > 0 ? atRes : all;
+        }
+
+        private static string PickUrl(string json, string pattern, string res)
+        {
+            var all = AllUrls(json, pattern, res);
+            return all.Count > 0 ? all[0] : null;
+        }
 
         /// <summary>Download one texture map; returns the asset path or null if it 404s (optional maps).</summary>
         private string Fetch(string slug, string res, string map, string assetDir, bool required)
