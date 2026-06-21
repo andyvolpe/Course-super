@@ -234,8 +234,10 @@ namespace Greenkeeper.Unity.Play
 
         private TerrainLayer Layer(string key, Color fallback, float tileSize)
         {
-            var l = new TerrainLayer { diffuseTexture = TexOrColor(key, fallback), tileSize = new Vector2(tileSize, tileSize) };
-            return l;
+            // Prefer a ready-made TerrainLayer (e.g. a NatureManufacture ground) dropped in by name.
+            var nm = Resources.Load<TerrainLayer>($"TerrainLayers/{key}");
+            if (nm != null) return nm;
+            return new TerrainLayer { diffuseTexture = TexOrColor(key, fallback), tileSize = new Vector2(tileSize, tileSize) };
         }
 
         /// <summary>Massed perimeter trees as efficient Terrain tree instances (skips the interior holes).</summary>
@@ -288,7 +290,9 @@ namespace Greenkeeper.Unity.Play
                 }
         }
 
-        /// <summary>Paint detail (geometry) grass across the rough + surrounds, off the short surfaces.</summary>
+        /// <summary>Paint detail (geometry) grass across the rough + surrounds, off the short surfaces.
+        /// Uses real grass from Resources/Grass/ (NatureManufacture etc.) — mesh prefabs and/or billboard
+        /// textures — and falls back to a generated grass billboard when that folder is empty.</summary>
         private void ApplyGrassDetail(Terrain terrain)
         {
             if (_grassMask == null) return;
@@ -297,32 +301,50 @@ namespace Greenkeeper.Unity.Play
                 var data = terrain.terrainData;
                 int res = 256;
                 data.SetDetailResolution(res, 16);
-                data.detailPrototypes = new[]
-                {
-                    new DetailPrototype
+
+                var protos = new List<DetailPrototype>();
+                foreach (var go in Resources.LoadAll<GameObject>("Grass"))      // real grass MESHES (NM etc.)
+                    protos.Add(new DetailPrototype
                     {
-                        prototypeTexture = MakeGrassBillboardTex(),
-                        renderMode = DetailRenderMode.GrassBillboard,
-                        healthyColor = new Color(0.42f, 0.58f, 0.30f),
-                        dryColor = new Color(0.55f, 0.55f, 0.32f),
-                        minWidth = 0.5f, maxWidth = 1.1f, minHeight = 0.3f, maxHeight = 0.8f,
-                        noiseSpread = 0.4f,
-                    },
-                };
-                var map = new int[res, res];
+                        prototype = go, usePrototypeMesh = true, renderMode = DetailRenderMode.Grass,
+                        healthyColor = Color.white, dryColor = new Color(0.82f, 0.82f, 0.6f),
+                        minWidth = 0.7f, maxWidth = 1.4f, minHeight = 0.5f, maxHeight = 1.2f, noiseSpread = 0.4f,
+                    });
+                foreach (var tex in Resources.LoadAll<Texture2D>("Grass"))      // grass BILLBOARD textures
+                    protos.Add(new DetailPrototype
+                    {
+                        prototypeTexture = tex, renderMode = DetailRenderMode.GrassBillboard,
+                        healthyColor = new Color(0.45f, 0.6f, 0.32f), dryColor = new Color(0.55f, 0.55f, 0.32f),
+                        minWidth = 0.5f, maxWidth = 1.1f, minHeight = 0.3f, maxHeight = 0.8f, noiseSpread = 0.4f,
+                    });
+                if (protos.Count == 0) // generated fallback so it's never bare
+                    protos.Add(new DetailPrototype
+                    {
+                        prototypeTexture = MakeGrassBillboardTex(), renderMode = DetailRenderMode.GrassBillboard,
+                        healthyColor = new Color(0.42f, 0.58f, 0.30f), dryColor = new Color(0.55f, 0.55f, 0.32f),
+                        minWidth = 0.5f, maxWidth = 1.1f, minHeight = 0.3f, maxHeight = 0.8f, noiseSpread = 0.4f,
+                    });
+                data.detailPrototypes = protos.ToArray();
+
+                int n = protos.Count;
+                var maps = new int[n][,];
+                for (int i = 0; i < n; i++) maps[i] = new int[res, res];
+                var rnd = new System.Random(123);
                 for (int z = 0; z < res; z++)
                     for (int x = 0; x < res; x++)
                     {
                         float u = x / (res - 1f), v = z / (res - 1f);
                         int mx = Mathf.Clamp(Mathf.RoundToInt(u * (GrassMaskRes - 1)), 0, GrassMaskRes - 1);
                         int mz = Mathf.Clamp(Mathf.RoundToInt(v * (GrassMaskRes - 1)), 0, GrassMaskRes - 1);
-                        if (_grassMask[mz, mx] > 0.5f) { map[z, x] = 0; continue; } // short surface — no tall grass
+                        if (_grassMask[mz, mx] > 0.5f) continue; // short surface — no tall grass
                         float wx = _terrMinX + u * _terrW, wz = _terrMinZ + v * _terrL;
-                        float n = Mathf.PerlinNoise(wx * 0.09f + 5f, wz * 0.09f + 9f);
-                        map[z, x] = n > 0.42f ? Mathf.RoundToInt(n * 7f) : 0; // clumpy
+                        float nz = Mathf.PerlinNoise(wx * 0.09f + 5f, wz * 0.09f + 9f);
+                        if (nz <= 0.42f) continue;
+                        maps[rnd.Next(n)][z, x] = Mathf.RoundToInt(nz * 7f); // clumpy; spread across prototypes
                     }
-                data.SetDetailLayer(0, 0, 0, map);
-                terrain.detailObjectDistance = 160f;
+                for (int i = 0; i < n; i++) data.SetDetailLayer(0, 0, i, maps[i]);
+
+                terrain.detailObjectDistance = 180f;
                 data.wavingGrassStrength = 0.35f;
                 data.wavingGrassSpeed = 0.5f;
                 data.wavingGrassAmount = 0.3f;
