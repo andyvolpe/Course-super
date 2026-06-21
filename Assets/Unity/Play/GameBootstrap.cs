@@ -28,8 +28,8 @@ namespace Greenkeeper.Unity.Play
         public float cellSizeM = 2.0f;
 
         private GameManager _game;
-        private GameObject _treePrefab; // optional Poly Haven tree (Resources/PolyHaven/Tree)
-        private Material _trunkMat;     // shared so hundreds of trees don't spawn thousands of materials
+        private GameObject[] _treePrefabs; // real tree models from Resources/Trees/* (+ Resources/PolyHaven/Tree)
+        private Material _trunkMat;        // shared so hundreds of trees don't spawn thousands of materials
         private Material[] _canopyMats;
         private FirstPersonController _fp;
         private GreenInspectionController _inspect;
@@ -64,7 +64,14 @@ namespace Greenkeeper.Unity.Play
                 _game = BuildGameManager();
                 if (_game == null || _game.Course == null) { _error = "GameManager/course failed to build."; return; }
 
-                _treePrefab = Resources.Load<GameObject>("PolyHaven/Tree"); // optional CC0 tree model
+                // Real tree models: drop a CC0 pack into Assets/Resources/Trees/ and they're scattered.
+                var trees = new List<GameObject>();
+                var folder = Resources.LoadAll<GameObject>("Trees");
+                if (folder != null) trees.AddRange(folder);
+                var ph = Resources.Load<GameObject>("PolyHaven/Tree");
+                if (ph != null) trees.Add(ph);
+                _treePrefabs = trees.ToArray();
+
                 var holesViz = new List<HoleViz>();
                 int holes = Mathf.Max(1, holesToRender);
                 // Snaking grid routing: rows of 6 holes, alternate rows face back the other way (like a
@@ -129,12 +136,11 @@ namespace Greenkeeper.Unity.Play
         {
             int rows = Mathf.CeilToInt(Mathf.Max(1, holesToRender) / 6f);
             float maxX = (6 - 1) * 30f, maxZ = (rows - 1) * 64f + 50f;
-            var mesh = ProcMesh.HeightGrid(-40f, -40f, maxX + 40f, maxZ + 40f, 4f, GroundY, 4f);
+            var mesh = ProcMesh.HeightGrid(-40f, -40f, maxX + 40f, maxZ + 40f, 4f, GroundY, 6f); // UV tiles ~6 m
             var ground = new GameObject("Ground");
             ground.AddComponent<MeshFilter>().sharedMesh = mesh;
-            var mat = SurfaceMat("Ground", new Color(0.20f, 0.30f, 0.13f), 4f, 4f); // Poly Haven ground texture if present
-            if (mat != null) ground.AddComponent<MeshRenderer>().sharedMaterial = mat;
-            else ground.AddComponent<MeshRenderer>();
+            // Mesh UVs carry the tiling, so use the shared material directly (no extra scale).
+            ground.AddComponent<MeshRenderer>().sharedMaterial = SharedSurfaceMaterial("Ground", new Color(0.20f, 0.30f, 0.13f));
             ground.AddComponent<MeshCollider>().sharedMesh = mesh; // walkable rolling terrain
         }
 
@@ -202,26 +208,27 @@ namespace Greenkeeper.Unity.Play
                 roughHalf[i] = w + 6.5f;
             }
 
-            // Rough corridor then fairway on top — both draped onto the rolling terrain.
-            BuildMesh(T, $"rough-{h}", "Rough", ProcMesh.Ribbon(center, roughHalf, 2f), 0.0f, new Color(0.20f, 0.32f, 0.13f));
+            // Rough corridor then fairway on top — both draped onto the rolling terrain. Small lifts so
+            // each surface layers cleanly on the one beneath WITHOUT floating above the ground.
+            BuildMesh(T, $"rough-{h}", "Rough", ProcMesh.Ribbon(center, roughHalf, 5f), 0.0f, new Color(0.20f, 0.32f, 0.13f));
             if (_game.Course.Get($"fairway-{h}") != null)
-                BuildMesh(T, $"fairway-{h}", "Fairway", ProcMesh.Ribbon(center, fairHalf, 2f), 0.04f, new Color(0.22f, 0.44f, 0.18f));
+                BuildMesh(T, $"fairway-{h}", "Fairway", ProcMesh.Ribbon(center, fairHalf, 5f), 0.03f, new Color(0.22f, 0.44f, 0.18f));
 
-            // Tee box (slightly raised pad).
+            // Tee box (barely proud of grade).
             Vector2 teeP = center[0];
             if (_game.Course.Get($"tee-{h}") != null)
-                BuildBlob(T, $"tee-{h}", "Tee", teeP, ProcMesh.EllipseRadii(2.4f, 3.0f, 18, 0.10f, hole * 31 + 1, 0f), 0.10f, new Color(0.20f, 0.46f, 0.20f));
+                BuildBlob(T, $"tee-{h}", "Tee", teeP, ProcMesh.EllipseRadii(2.4f, 3.0f, 18, 0.10f, hole * 31 + 1, 0f), 0.05f, new Color(0.20f, 0.46f, 0.20f));
 
-            // Green complex: apron, then a raised kidney green with a gentle tilt for break.
+            // Green complex: apron, then a kidney green just proud of grade (no floating disc).
             Vector2 greenP = center[m - 1];
             if (_game.Course.Get($"approach-{h}") != null)
             {
                 Vector2 apr = Vector2.Lerp(center[m - 2], greenP, 0.35f);
-                BuildBlob(T, $"approach-{h}", "Approach", apr, ProcMesh.EllipseRadii(4.5f, 3.5f, 20, 0.10f, hole * 53 + 7, 0f), 0.18f, new Color(0.20f, 0.45f, 0.19f));
+                BuildBlob(T, $"approach-{h}", "Approach", apr, ProcMesh.EllipseRadii(4.5f, 3.5f, 20, 0.10f, hole * 53 + 7, 0f), 0.04f, new Color(0.20f, 0.45f, 0.19f));
             }
             float gx = 4.2f + 1.2f * R(), gz = 4.8f + 1.4f * R();
             var greenObj = BuildBlob(T, $"green-{h}", "Green", greenP,
-                ProcMesh.EllipseRadii(gx, gz, 26, 0.08f, hole * 71 + 3, 0.22f), 0.45f, new Color(0.16f, 0.42f, 0.16f));
+                ProcMesh.EllipseRadii(gx, gz, 26, 0.08f, hole * 71 + 3, 0.22f), 0.06f, new Color(0.16f, 0.42f, 0.16f));
             var gsr = greenObj.GetComponent<SurfaceRenderer>();
             gsr.spatialGreen = true; gsr.greenHalf = new Vector2(gx, gz);
             greenObj.transform.localRotation = Quaternion.Euler(2.5f + 3.0f * R(), 30f * R(), 0f); // break
@@ -233,16 +240,16 @@ namespace Greenkeeper.Unity.Play
             int ci = Mathf.Clamp(Mathf.RoundToInt(m * 0.6f), 1, m - 2);
             BuildBunker($"bunker-{h}-3", T, center[ci] - Perp(center[ci + 1] - center[ci - 1]) * (fairHalf[ci] + 2f) * side, hole * 11 + 3);
 
-            // Pin + cup sit on the (raised) green surface.
+            // Pin + cup sit on the green surface.
             Vector3 greenWorld = T.TransformPoint(new Vector3(greenP.x, 0f, greenP.y));
-            float greenSurfaceY = GroundY(greenWorld.x, greenWorld.z) + 0.45f;
+            float greenSurfaceY = GroundY(greenWorld.x, greenWorld.z) + 0.06f;
             Vector3 cupLocal = new Vector3(greenP.x, greenSurfaceY - T.position.y + 0.03f, greenP.y);
             BuildPin(T, cupLocal);
 
             ScatterTrees(T, hole, center, roughHalf);
 
             Vector3 teeWorld = T.TransformPoint(new Vector3(teeP.x, 0f, teeP.y));
-            float teeSurfaceY = GroundY(teeWorld.x, teeWorld.z) + 0.10f;
+            float teeSurfaceY = GroundY(teeWorld.x, teeWorld.z) + 0.05f;
             return new HoleViz
             {
                 Green = greenObj.transform,
@@ -261,12 +268,12 @@ namespace Greenkeeper.Unity.Play
         {
             if (_game.Course.Get(zoneId) == null) return;
             float br = 1.4f + 0.8f * (float)new System.Random(seed).NextDouble();
-            BuildBlob(parent, zoneId, "Bunker", p, ProcMesh.EllipseRadii(br, br * 0.8f, 16, 0.18f, seed, 0f), -0.10f, new Color(0.82f, 0.74f, 0.55f));
+            BuildBlob(parent, zoneId, "Bunker", p, ProcMesh.EllipseRadii(br, br * 0.8f, 16, 0.18f, seed, 0f), -0.05f, new Color(0.82f, 0.74f, 0.55f));
         }
 
         /// <summary>A rounded blob surface (green/tee/approach/bunker) centred at a local XZ point.</summary>
         private GameObject BuildBlob(Transform parent, string zoneId, string matKey, Vector2 localCenter, float[] radii, float lift, Color color)
-            => BuildMeshAt(parent, zoneId, matKey, ProcMesh.Blob(radii, 2f), new Vector3(localCenter.x, 0f, localCenter.y), lift, color);
+            => BuildMeshAt(parent, zoneId, matKey, ProcMesh.Blob(radii, 4f), new Vector3(localCenter.x, 0f, localCenter.y), lift, color);
 
         /// <summary>A ribbon surface (fairway/rough) whose verts already live in hole-local space.</summary>
         private GameObject BuildMesh(Transform parent, string zoneId, string matKey, Mesh mesh, float lift, Color color)
@@ -278,6 +285,7 @@ namespace Greenkeeper.Unity.Play
             go.transform.SetParent(parent, false);
             go.transform.localPosition = localPos;
             DrapeOntoTerrain(mesh, parent, localPos, lift); // follow the rolling ground (+lift)
+            JitterUV(mesh, zoneId.GetHashCode());           // rotate/offset UVs so neighbours don't match
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             go.AddComponent<MeshRenderer>().sharedMaterial = SharedSurfaceMaterial(matKey, color);
             go.AddComponent<MeshCollider>().sharedMesh = mesh; // walkable + ball/look raycast target
@@ -300,6 +308,22 @@ namespace Greenkeeper.Unity.Play
             mesh.vertices = verts;
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
+        }
+
+        /// <summary>Rotate + offset a mesh's UVs by a deterministic per-surface amount, so two adjacent
+        /// surfaces using the same texture don't line up into an obvious repeating grid.</summary>
+        private static void JitterUV(Mesh mesh, int seed)
+        {
+            var rnd = new System.Random(seed);
+            float ang = (float)rnd.NextDouble() * Mathf.PI * 2f, c = Mathf.Cos(ang), s = Mathf.Sin(ang);
+            var off = new Vector2((float)rnd.NextDouble(), (float)rnd.NextDouble());
+            var uv = mesh.uv;
+            for (int i = 0; i < uv.Length; i++)
+            {
+                var u = uv[i];
+                uv[i] = new Vector2(u.x * c - u.y * s, u.x * s + u.y * c) + off;
+            }
+            mesh.uv = uv;
         }
 
         private void BuildPin(Transform parent, Vector3 localBase)
@@ -359,7 +383,9 @@ namespace Greenkeeper.Unity.Play
 
         private void PlaceTree(Transform parent, Vector3 localOrWorldPos, System.Random rnd)
         {
-            GameObject tree = _treePrefab != null ? Instantiate(_treePrefab, parent) : MakeProceduralTree(parent, rnd);
+            GameObject tree = (_treePrefabs != null && _treePrefabs.Length > 0)
+                ? Instantiate(_treePrefabs[rnd.Next(_treePrefabs.Length)], parent)
+                : MakeProceduralTree(parent, rnd);
             tree.transform.localPosition = localOrWorldPos;
             tree.transform.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f);
             tree.transform.localScale = Vector3.one * (0.85f + 0.7f * (float)rnd.NextDouble());

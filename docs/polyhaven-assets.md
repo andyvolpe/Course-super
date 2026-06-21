@@ -73,7 +73,33 @@ The manual steps below do the same thing by hand if you'd rather.
 3. Save it at `Assets/Resources/PolyHaven/Tree.prefab`. It's scattered along the rough edges
    (off the ±4.5 m playing corridor) automatically.
 
-## Committing the binaries (Git LFS)
+## Real trees (drop-in model packs)
+
+The play test scatters **every prefab in `Assets/Resources/Trees/`** (plus `Resources/PolyHaven/Tree`)
+randomly along the rough edges and as a perimeter forest. With none present it falls back to simple
+procedural trees (placeholders — they look like primitives on purpose).
+
+To get real 3D trees, import a CC0 low-poly nature pack and drop the tree prefabs into
+`Assets/Resources/Trees/`:
+- **Quaternius — Ultimate Nature / Stylized Trees** (CC0): https://quaternius.com — FBX/glTF, very low-poly, ideal.
+- **Kenney — Nature Kit** (CC0): https://kenney.nl/assets/nature-kit
+- Any Asset Store tree pack works too — just place the prefabs in that folder.
+
+Make each a prefab (drag the model into a scene, then back into the Project), move it into
+`Resources/Trees/`, and press Play. Several different prefabs → varied forest.
+
+## Grass that doesn't look obviously tiled
+
+The surfaces sample a tiling texture, so a single repeating texture reads as a grid. Mitigations now
+baked in: larger tile distance + a per-surface UV rotation so neighbours don't line up. To go
+further, in order of effort:
+1. **Better source texture** — use a *seamless* grass at 2K–4K (Poly Haven `aerial_grass_rock` is okay;
+   a dedicated seamless lawn texture is better), and raise the material's tiling so blades look fine.
+2. **Anti-tiling shader** — a triplanar / noise-blended material hides repetition entirely (no Unity
+   Terrain needed). Ask and I'll add a URP shader the surfaces use.
+3. **Unity Terrain** — the "proper" route: splat-mapped ground (multiple blended textures + normals)
+   with the built-in tree + detail-grass systems (real geometry grass). Bigger change; ask and I'll
+   migrate the course onto Terrain.
 
 HDRIs/textures are large; track them with Git LFS so the repo stays sane:
 
