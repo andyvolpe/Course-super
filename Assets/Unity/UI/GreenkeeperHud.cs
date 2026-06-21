@@ -67,15 +67,18 @@ namespace Greenkeeper.Unity.UI
             DrawToolBadge(W, H);
         }
 
-        // The handheld readout: what tool is in hand + the last measured value (clean, not a panel).
+        // The handheld readout: what tool is in hand + the last measured value. Uses explicit-rect GUI
+        // (not GUILayout) so the conditional second line can't desync the Layout vs Repaint control count.
         private void DrawToolBadge(int W, int H)
         {
             if (room == null || room.Tool == Greenkeeper.Unity.Play.CarriedTool.None) return;
-            GUILayout.BeginArea(new Rect(W - 320, H / 2 + 22, 310, 60), T.Panel);
-            GUILayout.Label($"<b>{room.ToolName}</b> in hand — E to measure", T.GoldText);
-            if (inspection != null && !string.IsNullOrEmpty(inspection.LastToolReadout))
-                GUILayout.Label(inspection.LastToolReadout, T.Body);
-            GUILayout.EndArea();
+            var box = new Rect(W - 320, H / 2 + 22, 310, 60);
+            GUI.Box(box, GUIContent.none, T.Panel);
+            GUI.Label(new Rect(box.x + 10, box.y + 6, box.width - 20, 24),
+                $"<b>{room.ToolName}</b> in hand — E to measure", T.GoldText);
+            string readout = inspection != null ? inspection.LastToolReadout : null;
+            if (!string.IsNullOrEmpty(readout))
+                GUI.Label(new Rect(box.x + 10, box.y + 30, box.width - 20, 24), readout, T.Body);
         }
 
         private void DrawTopBar(int W, int topH)

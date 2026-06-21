@@ -815,7 +815,7 @@ namespace Greenkeeper.Unity.Play
             float floorY = SurfaceGroundY(cx, cz);
             _roomCenter = new Vector3(cx, floorY, cz);
             float hx = _roomHalf.x, hz = _roomHalf.y;     // interior half-extents
-            const float wh = 3.2f, wt = 0.3f, door = 2.2f, doorH = 2.3f;
+            const float wh = 3.4f, wt = 0.3f, door = 3.2f, doorH = 2.8f; // wide/tall doorway you can't snag on
 
             var root = new GameObject("MaintenanceBuilding").transform;
             root.position = _roomCenter; // local space: floor at y=0, interior x∈[-hx,hx], z∈[-hz,hz]
@@ -829,11 +829,13 @@ namespace Greenkeeper.Unity.Play
             Box("Wall-Z+", root, new Vector3(0, wh / 2, hz), new Vector3(2 * hx, wh, wt), wall);
             Box("Wall-Z-", root, new Vector3(0, wh / 2, -hz), new Vector3(2 * hx, wh, wt), wall);
             Box("Wall-X-", root, new Vector3(-hx, wh / 2, 0), new Vector3(wt, wh, 2 * hz), wall);
-            // +X wall has a centred doorway onto the course: two jambs + a lintel.
+            // +X wall has a centred doorway onto the course: two jambs + a lintel (lintel non-solid so a
+            // tall step never blocks the head), plus a flush stoop that bridges any terrain step at the sill.
             float seg = (2 * hz - door) / 2f, segC = (door / 2f + seg / 2f);
             Box("Door-jamb+", root, new Vector3(hx, wh / 2, segC), new Vector3(wt, wh, seg), wall);
             Box("Door-jamb-", root, new Vector3(hx, wh / 2, -segC), new Vector3(wt, wh, seg), wall);
-            Box("Door-lintel", root, new Vector3(hx, (doorH + wh) / 2, 0), new Vector3(wt, wh - doorH, door), wall);
+            Box("Door-lintel", root, new Vector3(hx, (doorH + wh) / 2, 0), new Vector3(wt, wh - doorH, door), wall, collider: false);
+            Box("Stoop", root, new Vector3(hx + 1.25f, -0.1f, 0), new Vector3(2.5f, 0.2f, door), floor); // flush walk-out
 
             // A soft interior light so the room reads (the sun is outside).
             var lampGo = new GameObject("RoomLight");
@@ -899,11 +901,14 @@ namespace Greenkeeper.Unity.Play
         private (GameObject player, Camera cam) BuildPlayer()
         {
             var player = new GameObject("Player");
-            player.transform.position = _roomSpawn != Vector3.zero
+            bool inRoom = _roomSpawn != Vector3.zero;
+            player.transform.position = inRoom
                 ? _roomSpawn                                          // wake up inside the maintenance building
                 : new Vector3(0f, SurfaceGroundY(0f, 0f) + 1.3f, 0f); // (fallback) hole-1 tee
+            if (inRoom) player.transform.rotation = Quaternion.Euler(0f, 90f, 0f); // face the doorway (+X)
             var cc = player.AddComponent<CharacterController>();
             cc.height = 1.8f; cc.radius = 0.3f; cc.center = new Vector3(0, 0.9f, 0);
+            cc.stepOffset = 0.45f; // step out over a small sill without snagging
 
             // Reuse the scene's existing camera if there is one (avoids two cameras fighting); else make one.
             Camera cam = Camera.main;

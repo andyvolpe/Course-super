@@ -74,7 +74,8 @@ namespace Greenkeeper.Unity.UI
             GUILayout.Label($"MAINTENANCE BUILDING  ·  Day <b>{Day}</b> · {game.Director.Clock.Season}", T.Section);
             GUILayout.Label("Read the <b>map</b> (what needs you), the <b>forecast</b> (what's coming), then advance on the " +
                             "<b>calendar</b>: a Day runs your plan, a Week/Month coasts and stops on trouble.", T.Dim);
-            if (room.Tool != CarriedTool.None) GUILayout.Label($"carrying the <b>{room.ToolName}</b>", T.GoldText);
+            // Always emit this label (empty when no tool) so the layout control count is event-stable.
+            GUILayout.Label(room.Tool != CarriedTool.None ? $"carrying the <b>{room.ToolName}</b>" : " ", T.GoldText);
             GUILayout.EndArea();
         }
 
