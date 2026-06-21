@@ -81,6 +81,14 @@ namespace Greenkeeper.Unity.Play
                 c = Color.Lerp(c, c * 0.6f, (float)t.WetSheen);                                 // wet sheen
                 c = Color.Lerp(c, new Color(0.72f, 0.64f, 0.40f), (float)t.Lesions * 0.85f);    // disease straw
                 c = Color.Lerp(c, new Color(0.34f, 0.26f, 0.18f), (float)t.Thinning * 0.7f);    // bare soil
+
+                // Un-mown LENGTH reads visibly shaggier: a longer canopy self-shadows into a deeper,
+                // more olive green (rough swallows the ball; fairways/greens just look unkempt).
+                double cut = zone.Surface != null ? zone.Surface.MowHeightIn : zone.MowHeightIn;
+                double range = zone.Type == ZoneType.Rough ? 4.0 : 1.5;
+                float over = Mathf.Clamp01((float)((zone.GrassHeightIn - cut) / range));
+                if (over > 0.01f)
+                    c = Color.Lerp(c, new Color(0.27f, 0.36f, 0.18f), over * 0.6f);
             }
 
             _r.GetPropertyBlock(_mpb);

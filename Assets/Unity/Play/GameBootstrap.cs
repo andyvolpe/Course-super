@@ -27,6 +27,8 @@ namespace Greenkeeper.Unity.Play
         public int holesToRender = 18;    // full holes laid out tee -> fairway -> approach -> green
         public float cellSizeM = 2.0f;
         public bool enableTerrainDetailGrass = false; // URP renders terrain detail grass dark — off by default
+        public bool enableGrassObjects = true;        // lit grass MESHES scattered as GameObjects in the rough
+        public int maxGrassObjects = 3000;            // cap so 18 holes of rough grass stays cheap
 
         // Real-scale layout (metres). Holes are 100–530 m long, so the grid cells are big.
         private const int Cols = 6;
@@ -43,6 +45,7 @@ namespace Greenkeeper.Unity.Play
         private float[,] _grassMask;       // [z,x]; 1 = short maintained surface — keep tall grass OFF it
         private const int GrassMaskRes = 384;
         private GameObject[] _treePrefabs; // real tree models from Resources/Trees/* (+ Resources/PolyHaven/Tree)
+        private GameObject[] _grassPrefabs; // real grass meshes from Resources/Grass/* (scattered, not terrain detail)
         private Material _trunkMat;        // shared so hundreds of trees don't spawn thousands of materials
         private Material[] _canopyMats;
         private Dictionary<string, Material> _turfMats; // generated per-surface turf materials (cached)
@@ -84,6 +87,10 @@ namespace Greenkeeper.Unity.Play
                 if (ph != null) trees.Add(ph);
                 _treePrefabs = trees.ToArray();
 
+                // Real LIT grass meshes (NatureManufacture etc.) scattered as GameObjects in the rough —
+                // not terrain detail, which URP renders near-black. Empty folder = scatter is skipped.
+                _grassPrefabs = Resources.LoadAll<GameObject>("Grass") ?? new GameObject[0];
+
                 BuildGround(); // Unity Terrain (heightmap + splat + terrain trees), or mesh-ground fallback
                 _game = BuildGameManager();
                 if (_game == null || _game.Course == null) { _error = "GameManager/course failed to build."; return; }
@@ -114,6 +121,9 @@ namespace Greenkeeper.Unity.Play
                     PlaceTerrainTrees(_terrain);
                     if (enableTerrainDetailGrass) ApplyGrassDetail(_terrain);
                 }
+
+                // Lit grass mesh tufts in the rough fringe around every hole (URP-safe; terrain detail is dark).
+                if (enableGrassObjects) ScatterGrassObjects();
 
                 var (player, cam) = BuildPlayer();
                 BuildBallAndCup(player, holesViz);
@@ -305,6 +315,51 @@ namespace Greenkeeper.Unity.Play
                     if (_grassMask[z, x] > 0.5f) return true;
                 }
             return false;
+        }
+
+        // ---- lit grass MESHES scattered as GameObjects (URP-safe) ----
+
+        /// <summary>
+        /// Scatter real lit grass meshes (Resources/Grass — NatureManufacture etc.) as GameObjects through
+        /// the ROUGH fringe that rings every maintained surface, clumped by noise and capped for cost. This
+        /// is the URP-safe alternative to terrain detail grass (which renders near-black). Off the short
+        /// surfaces via the grass mask; each tuft gets a random yaw + size so the rough never tiles.
+        /// </summary>
+        private void ScatterGrassObjects()
+        {
+            if (_grassMask == null || _grassPrefabs == null || _grassPrefabs.Length == 0) return;
+            try
+            {
+                var parent = new GameObject("RoughGrass").transform;
+                var rnd = new System.Random(4242);
+                int placed = 0;
+                // Walk the mask on a stride (~ every 2 cells ≈ 4 m); a cell qualifies if it's OFF a surface
+                // but within the rough band (within ~8 cells of one), so grass hugs the holes, not the void.
+                const int stride = 2, bandCells = 8;
+                for (int z = 0; z < GrassMaskRes && placed < maxGrassObjects; z += stride)
+                    for (int x = 0; x < GrassMaskRes && placed < maxGrassObjects; x += stride)
+                    {
+                        if (_grassMask[z, x] > 0.5f) continue;          // on a short surface
+                        if (!MaskedNear(x, z, bandCells)) continue;     // not in the rough around a hole
+                        float u = x / (float)(GrassMaskRes - 1), v = z / (float)(GrassMaskRes - 1);
+                        float wx = _terrMinX + u * _terrW, wz = _terrMinZ + v * _terrL;
+                        float clump = Mathf.PerlinNoise(wx * 0.12f + 3f, wz * 0.12f + 8f);
+                        if (clump < 0.45f) continue;                    // clumpy, not a uniform carpet
+                        if (rnd.NextDouble() > clump) continue;         // thinner at clump edges
+                        // jitter within the cell so the grid never shows
+                        float jx = (float)(rnd.NextDouble() - 0.5) * (_terrW / GrassMaskRes) * stride;
+                        float jz = (float)(rnd.NextDouble() - 0.5) * (_terrL / GrassMaskRes) * stride;
+                        float px = wx + jx, pz = wz + jz;
+                        var prefab = _grassPrefabs[rnd.Next(_grassPrefabs.Length)];
+                        var g = Instantiate(prefab, new Vector3(px, SurfaceGroundY(px, pz), pz),
+                                            Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f), parent);
+                        float s = 0.7f + (float)rnd.NextDouble() * 0.8f; // 0.7..1.5 size variety
+                        g.transform.localScale = new Vector3(s, s * (0.9f + (float)rnd.NextDouble() * 0.5f), s);
+                        placed++;
+                    }
+                Debug.Log($"[Bootstrap] scattered {placed} lit grass tufts in the rough.");
+            }
+            catch (System.Exception e) { Debug.LogWarning("[Bootstrap] grass scatter skipped: " + e.Message); }
         }
 
         // ---- detail (geometry) grass on the Terrain ----
