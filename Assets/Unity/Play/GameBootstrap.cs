@@ -31,6 +31,20 @@ namespace Greenkeeper.Unity.Play
         private bool _planMode = true; // start in Plan mode so the HUD is usable immediately
         private string _error;
 
+        /// <summary>
+        /// Auto-boot: when you enter Play mode in ANY scene, if there's no GameBootstrap already, spawn
+        /// one. This means you can just press Play on an empty/default scene with zero setup — no
+        /// GameObject, no Add Component. (Runs only in play mode, not during EditMode tests.)
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void AutoBoot()
+        {
+            if (FindObjectOfType<GameBootstrap>() != null) return; // already placed by hand
+            var go = new GameObject("GameBootstrap (auto)");
+            go.AddComponent<GameBootstrap>();
+            Debug.Log("[Bootstrap] auto-booted — no GameBootstrap was in the scene, so one was created.");
+        }
+
         private void Awake()
         {
             try
