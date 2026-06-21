@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using Greenkeeper.Sim.Config;
 using Greenkeeper.Sim.Math;
 using Greenkeeper.Sim.Physics;
 using Greenkeeper.Sim.State;
@@ -28,12 +29,20 @@ namespace Greenkeeper.Unity.Play
         [Header("Input")]
         public KeyCode chargeKey = KeyCode.Mouse0;     // hold to build power, release to strike
         public KeyCode approachKey = KeyCode.Mouse1;   // hold for a short approach instead of a putt
+        public KeyCode dropKey = KeyCode.B;            // drop the ball where you're looking (test any lie)
         public float chargeRate = 0.6f;                // power per second while held
         public float worldFeet = 0.3048f;              // metres per foot (sim works in feet)
+
+        [Header("Full shot (off the green)")]
+        public float fullShotMaxFt = 240f;             // a maxed full swing from a clean lie
+        public float pitchMaxFt = 80f;                 // RMB pitch off the green (short, lofted)
+        public float flierBoost = 1.25f;               // a flier lie jumps farther (unpredictable)
 
         public int Strokes { get; private set; }
         public float Power { get; private set; }
         public bool Holed { get; private set; }
+        /// <summary>The lie the ball is currently sitting on (for the HUD): surface + clean/flier/buried.</summary>
+        public string LieNote { get; private set; }
 
         private bool _charging;
         private bool _approachMode;
@@ -47,7 +56,21 @@ namespace Greenkeeper.Unity.Play
 
         private void Update()
         {
-            if (_rolling || ball == null) return;
+            if (ball == null) return;
+            if (_rolling) return;
+
+            // Keep the lie readout fresh so the HUD can show what you're sitting on.
+            ZoneState restingOn = SurfaceUnderBall(out _);
+            LieNote = restingOn == null ? ""
+                : (restingOn.Type == ZoneType.Green ? "on the green"
+                   : $"{restingOn.Type}: {BallPhysics.SolveLie(restingOn, null).Quality}");
+
+            // Drop the ball where you're looking — lets you test a fairway/rough/bunker lie on demand.
+            if (UnityEngine.Input.GetKeyDown(dropKey) && cam != null)
+            {
+                Ray ray = cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+                if (Physics.Raycast(ray, out RaycastHit drop, 80f)) { ball.position = drop.point + Vector3.up * 0.06f; Holed = false; }
+            }
 
             if (UnityEngine.Input.GetKeyDown(chargeKey)) { _charging = true; _approachMode = false; Power = 0f; }
             if (UnityEngine.Input.GetKeyDown(approachKey)) { _charging = true; _approachMode = true; Power = 0f; }
@@ -65,14 +88,21 @@ namespace Greenkeeper.Unity.Play
 
         private void Strike(float power, bool approach)
         {
-            ZoneState green = GreenUnderBall(out Vector3 surfaceNormal);
-            if (green == null) return;
+            ZoneState surface = SurfaceUnderBall(out Vector3 surfaceNormal);
+            if (surface == null) return;
             Strokes++;
 
             // Aim = camera forward projected to the ground plane.
             Vector3 fwd = cam.transform.forward; fwd.y = 0f; fwd.Normalize();
             var aim = new Vec2(fwd.x, fwd.z);
 
+            if (surface.Type == ZoneType.Green) PlayOnGreen(surface, power, approach, fwd, aim, surfaceNormal);
+            else PlayFullShot(surface, power, approach, fwd);
+        }
+
+        /// <summary>On the green: a true putt (LMB) or a short check-up approach (RMB), per BallPhysics.</summary>
+        private void PlayOnGreen(ZoneState green, float power, bool approach, Vector3 fwd, Vec2 aim, Vector3 surfaceNormal)
+        {
             if (approach)
             {
                 var res = BallPhysics.SolveApproach(green, new ApproachInput(power, aim), null);
@@ -91,6 +121,29 @@ namespace Greenkeeper.Unity.Play
                 Vector3 disp = new Vector3((float)res.Displacement.X, 0f, (float)res.Displacement.Y) * worldFeet;
                 StartCoroutine(RollTo(ball.position + disp, Mathf.Max(0.3f, (float)res.RollSeconds), 0f));
             }
+        }
+
+        /// <summary>
+        /// Off the green: a full swing (LMB) or a pitch (RMB). The LIE — read from the surface's
+        /// maintained state via BallPhysics.SolveLie — sets the outcome: a firm fairway runs out, thick
+        /// rough eats distance / flies / buries, a washed bunker plugs. The miss is punished by the
+        /// surface YOU maintain, and wherever it lands sets the next lie.
+        /// </summary>
+        private void PlayFullShot(ZoneState surface, float power, bool pitch, Vector3 fwd)
+        {
+            LieResult lie = BallPhysics.SolveLie(surface, null);
+
+            double maxFt = pitch ? pitchMaxFt : fullShotMaxFt;
+            double carryFt = maxFt * power * lie.DistanceFactor;
+            if (lie.Flier) carryFt *= flierBoost;                 // grass jumps the ball unpredictably far
+            double runFt = pitch ? 0.0 : lie.RollOutFt;           // firm fairway run-out on a full shot
+            double totalFt = carryFt + runFt;
+
+            Vector3 dir = new Vector3(fwd.x, 0f, fwd.z);
+            Vector3 dest = ball.position + dir * (float)totalFt * worldFeet;
+            float apex = (pitch ? 0.22f : 0.12f) * (float)totalFt * worldFeet; // pitch flies higher/shorter
+            float seconds = Mathf.Max(0.5f, (float)totalFt / 120f);
+            StartCoroutine(RollTo(dest, seconds, apex));
         }
 
         private IEnumerator RollTo(Vector3 worldTarget, float seconds, float bounce)
@@ -115,14 +168,18 @@ namespace Greenkeeper.Unity.Play
             _rolling = false;
         }
 
-        private ZoneState GreenUnderBall(out Vector3 normal)
+        /// <summary>The sim zone the ball is resting on — a green sub-cell OR any other surface quad.</summary>
+        private ZoneState SurfaceUnderBall(out Vector3 normal)
         {
             normal = Vector3.up;
             if (ball == null || game == null || game.Course == null) return null;
             if (!Physics.Raycast(ball.position + Vector3.up * 0.5f, Vector3.down, out RaycastHit hit, 3f)) return null;
             normal = hit.normal;
             var gr = hit.collider.GetComponentInParent<GreenRenderer>();
-            return gr != null ? game.Course.Get(gr.zoneId) : null;
+            if (gr != null) return game.Course.Get(gr.zoneId);
+            var sr = hit.collider.GetComponent<SurfaceRenderer>();
+            if (sr != null) return game.Course.Get(sr.zoneId);
+            return null;
         }
 
         public void NextHole() { Strokes = 0; Holed = false; }
