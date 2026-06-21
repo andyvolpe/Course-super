@@ -34,14 +34,14 @@ namespace Greenkeeper.Tests
         [Test]
         public void GoodManagement_IsProfitable_Mismanagement_BleedsCash()
         {
+            double start = EconomyConfig.Default.StartingCash;
             double goodCash = RunSeasonCash(PlanGood);
             double badCash = RunSeasonCash(PlanNeglect);
 
-            TestContext.WriteLine($"end cash — good: ${goodCash:N0}  neglect: ${badCash:N0}");
-            Assert.Greater(goodCash, EconomyConfig.Default.StartingCash,
-                "a well-run course should finish a summer in the black");
-            Assert.Less(badCash, goodCash - 20000.0,
-                "neglect must cost real money (condition -> rounds -> revenue collapse) while costs continue");
+            TestContext.WriteLine($"start ${start:N0} -> end cash — good: ${goodCash:N0}  neglect: ${badCash:N0}");
+            Assert.Greater(goodCash, start, "a well-run season must end in net PROFIT");
+            Assert.Less(badCash, start, "a do-nothing season must end in net LOSS (fixed costs drain regardless)");
+            Assert.Less(badCash, 0.0, "doing nothing for a season should bury you in the red, not merely earn less");
         }
 
         [Test]

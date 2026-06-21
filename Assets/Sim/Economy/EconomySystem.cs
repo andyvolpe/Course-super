@@ -26,12 +26,16 @@ namespace Greenkeeper.Sim.Economy
 
             double weatherFactor = WeatherDemandFactor(w, cfg, agro);
             double seasonFactor = SeasonDemandFactor(season);
-            double conditionFactor = System.Math.Pow(Mathx.Clamp01(condition / 100.0), cfg.DemandConditionExponent);
+            // Demand collapses below the floor and falls steeply above it: (cond-floor)/(100-floor) ^ exp.
+            double above = Mathx.Clamp01((condition - cfg.DemandFloorCondition)
+                                         / System.Math.Max(1.0, 100.0 - cfg.DemandFloorCondition));
+            double conditionFactor = System.Math.Pow(above, cfg.DemandConditionExponent);
             double repFactor = Mathx.Clamp01(eco.Reputation / 100.0);
 
             double rounds = cfg.BaseRoundsCapacity * conditionFactor * repFactor * weatherFactor * seasonFactor;
             double revenue = rounds * cfg.GreenFee;
-            double costs = cfg.DailyOverhead + MaterialCost(course, plan, cfg);
+            // Fixed costs accrue regardless of activity; materials only when you actually work.
+            double costs = cfg.FixedDailyCost() + MaterialCost(course, plan, cfg);
             double net = revenue - costs;
             eco.Cash += net;
 

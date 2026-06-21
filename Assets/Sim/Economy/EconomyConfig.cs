@@ -17,7 +17,10 @@ namespace Greenkeeper.Sim.Economy
         // ---- Demand -> revenue ----
         public double GreenFee = 55.0;
         public double BaseRoundsCapacity = 220.0;  // max rounds/day a full, perfect course in peak season draws
-        public double DemandConditionExponent = 1.6; // poor condition sheds golfers fast (convex)
+        // Condition -> demand is gated by a FLOOR (nobody plays a course below it) and a steep curve
+        // above it, so poor condition visibly empties the tee sheet within weeks (GDD §8).
+        public double DemandFloorCondition = 25.0; // below this, demand collapses to ~0
+        public double DemandConditionExponent = 2.2; // steep convex falloff above the floor
         public double ReputationRate = 0.04;        // EMA speed of reputation toward condition
 
         // Weather playability multipliers on demand.
@@ -27,8 +30,22 @@ namespace Greenkeeper.Sim.Economy
         public double WeatherHeatFactor = 0.8;
         public double HeavyRainMm = 8.0;
 
-        // ---- Costs ----
-        public double DailyOverhead = 750.0;   // crew wages + fixed daily costs
+        // ---- FIXED costs (TDD §4.6): these drain EVERY day regardless of activity. Doing nothing does
+        //      not stop the bills — a do-nothing quarter must trend toward loss. All tunable. ----
+        public double CrewWagesPerDay = 1500.0;     // the maintenance crew is on payroll whether or not you assign them
+        public double DebtServicePerDay = 1200.0;   // mortgage / lease on the property
+        public double AdminClubhousePerDay = 900.0; // clubhouse + admin staff
+        public double UtilitiesPerDay = 600.0;      // water + power base load
+        public double EquipmentLeasePerDay = 500.0; // mowers/sprayers depreciation + lease
+        public double PropertyTaxPerDay = 250.0;
+        public double InsurancePerDay = 200.0;
+
+        /// <summary>Total fixed cost that accrues every day no matter what (≈ $5,150/day at defaults).</summary>
+        public double FixedDailyCost()
+            => CrewWagesPerDay + DebtServicePerDay + AdminClubhousePerDay + UtilitiesPerDay
+             + EquipmentLeasePerDay + PropertyTaxPerDay + InsurancePerDay;
+
+        // ---- VARIABLE costs (materials/inputs) — only when you actually do the work ----
         public double SprayCost = 60.0;        // per zone sprayed (fungicide)
         public double FertCostPerN = 4.0;      // per unit of nitrogen applied
         public double WaterCostPerMm = 1.5;    // per mm irrigation per zone
