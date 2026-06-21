@@ -110,8 +110,12 @@ namespace Greenkeeper.Unity.UI
                 ("Roll", () => ForEachGreen(g => TaskCatalog.Roll(g.Id))),
                 ("Spray", () => ForEachGreen(g => TaskCatalog.Spray(g.Id))));
             Row(("Water", () => ForEachGreen(g => TaskCatalog.Water(g.Id))),
-                ("Feed N", () => ForEachGreen(g => TaskCatalog.Fertilize(g.Id))),
                 ("Aerate", () => ForEachGreen(g => TaskCatalog.Aerate(g.Id))));
+            GUILayout.Label("Fertility (all greens)", T.Dim);
+            Row(("Foliar N+K", () => ForEachGreen(g => TaskCatalog.FeedFoliar(g.Id))),
+                ("Granular slow", () => ForEachGreen(g => TaskCatalog.FeedGranularSlow(g.Id))));
+            Row(("Granular QUICK", () => ForEachGreen(g => TaskCatalog.FeedGranularQuick(g.Id))),
+                ("Iron — colour", () => ForEachGreen(g => TaskCatalog.Iron(g.Id))));
             Row(("Rake bunkers", () => AddTask(TaskCatalog.RakeBunkers())),
                 ("Triplex", () => AddTask(TaskCatalog.Triplex())),
                 ("Clear", () => game.BeginWindow()));
@@ -165,7 +169,9 @@ namespace Greenkeeper.Unity.UI
             GUILayout.Label("EARNED READS", T.Section);
             GUILayout.Label(obs.InfectionRevealed ? $"infection {obs.RevealedMaxInfection:0.#} · symptom {obs.RevealedMeanExpression:0.#}" : "infection — unknown", obs.InfectionRevealed ? T.Body : T.Dim);
             GUILayout.Label(obs.MoistureMetered ? $"moisture {obs.MeteredMoisturePct:0.#}%" : "moisture — unknown", obs.MoistureMetered ? T.Body : T.Dim);
-            GUILayout.Label(obs.SoilTested ? $"N {obs.RevealedNitrogenPct:0.#} · OM {obs.RevealedOrganicMatterPct:0.#}%" : "nutrients — unknown", obs.SoilTested ? T.Body : T.Dim);
+            GUILayout.Label(obs.SoilTested
+                ? $"N {obs.RevealedNitrogenPct:0.#} · K {obs.RevealedPotassiumPct:0.#} · Fe {obs.RevealedIronPct:0.#} · OM {obs.RevealedOrganicMatterPct:0.#}%"
+                : "nutrients — unknown", obs.SoilTested ? T.Body : T.Dim);
             if (obs.TurfDebtShown) GUILayout.Label($"<color=#{Hex(T.Clay)}>turf debt {obs.TurfDebtPct:0}</color>", T.Body);
             if (obs.ThreatTelegraphed) GUILayout.Label($"<color=#{Hex(T.Gold)}>{obs.ThreatNote}</color>", T.Body);
             Row(("Scout", () => game.Legibility.Scout(id, Day)),
@@ -175,11 +181,17 @@ namespace Greenkeeper.Unity.UI
             GUILayout.Space(2);
             GUILayout.Label("ADD FOR THIS GREEN", T.Section);
             Row(("Water", () => AddTask(TaskCatalog.Water(id))),
-                ("Feed N", () => AddTask(TaskCatalog.Fertilize(id))),
-                ("Spray", () => AddTask(TaskCatalog.Spray(id))));
-            Row(("Mow", () => AddTask(TaskCatalog.WalkMow(id))),
-                ("Roll", () => AddTask(TaskCatalog.Roll(id))),
+                ("Spray", () => AddTask(TaskCatalog.Spray(id))),
+                ("Mow", () => AddTask(TaskCatalog.WalkMow(id))));
+            Row(("Roll", () => AddTask(TaskCatalog.Roll(id))),
                 ("Aerate", () => AddTask(TaskCatalog.Aerate(id))));
+
+            GUILayout.Space(2);
+            GUILayout.Label("FERTILITY PROGRAM — N is a fork, not a slider", T.Section);
+            Row(($"Foliar N+K ({TaskCatalog.SpoonN:0}N/{TaskCatalog.SpoonK:0}K)", () => AddTask(TaskCatalog.FeedFoliar(id))),
+                ($"Granular slow ({TaskCatalog.GranularN:0}N/{TaskCatalog.GranularK:0}K)", () => AddTask(TaskCatalog.FeedGranularSlow(id))));
+            Row(($"Granular QUICK ({TaskCatalog.GranularN:0}N)", () => AddTask(TaskCatalog.FeedGranularQuick(id))),
+                ($"Iron — colour ({TaskCatalog.IronFe:0}Fe)", () => AddTask(TaskCatalog.Iron(id))));
 
             var ladder = game.Tournament;
             if (ladder != null && ladder.Current != null)

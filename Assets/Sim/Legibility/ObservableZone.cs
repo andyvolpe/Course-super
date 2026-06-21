@@ -27,6 +27,8 @@ namespace Greenkeeper.Sim.Legibility
         // Earned via a soil test: nutrient / OM trend.
         public bool SoilTested;
         public double RevealedNitrogenPct;
+        public double RevealedPotassiumPct;
+        public double RevealedIronPct;
         public double RevealedOrganicMatterPct;
 
         // Assist-only surfacing (never on full difficulty).

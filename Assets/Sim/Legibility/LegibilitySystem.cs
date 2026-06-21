@@ -104,6 +104,8 @@ namespace Greenkeeper.Sim.Legibility
             {
                 obs.SoilTested = true;
                 obs.RevealedNitrogenPct = zone.NitrogenPct;
+                obs.RevealedPotassiumPct = zone.PotassiumPct;
+                obs.RevealedIronPct = zone.IronPct;
                 obs.RevealedOrganicMatterPct = zone.OrganicMatterPct;
             }
 

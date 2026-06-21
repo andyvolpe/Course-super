@@ -1,4 +1,6 @@
 // Greenkeeper.Sim — pure C#. MUST NOT reference UnityEngine.
+using Greenkeeper.Sim.State;
+
 namespace Greenkeeper.Sim.Crew
 {
     /// <summary>The MVP maintenance task types (GDD §4, TDD §5).</summary>
@@ -9,7 +11,8 @@ namespace Greenkeeper.Sim.Crew
         RollGreens,      // per green, speed/smoothness
         Spray,           // per zone, fungicide
         Water,           // per zone, irrigation
-        Fertilize,       // per zone, nitrogen
+        Fertilize,       // per zone, nitrogen (legacy simple feed)
+        FertilizeProgram,// per zone, the full fertility PROGRAM (source/method/N:K/Fe)
         Aerate,          // per zone, relieves OM/debt
         MowFairways,     // per fairway
         RakeBunkers,     // course-wide
@@ -27,6 +30,7 @@ namespace Greenkeeper.Sim.Crew
         public string ZoneId;        // null/"" => course-wide / all relevant zones
         public double HoursCost;     // hours consumed from the window budget
         public double Amount;        // optional payload (irrigation mm, fertilizer N) — 0 => catalog default
+        public FertApplication Program; // payload for TaskType.FertilizeProgram (source/method/N:K/Fe)
 
         public bool Delegated;       // true => staff handle it; false => the player does it
         public string AssignedCrewId; // which crew member (for delegated tasks / speed)

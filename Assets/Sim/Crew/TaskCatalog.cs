@@ -22,6 +22,7 @@ namespace Greenkeeper.Sim.Crew
                 case TaskType.Spray:            return 0.5;  // per zone
                 case TaskType.Water:            return 0.3;  // per zone
                 case TaskType.Fertilize:        return 0.4;  // per zone
+                case TaskType.FertilizeProgram: return 0.4;  // per zone (a foliar spray is a touch lighter, set per helper)
                 case TaskType.Aerate:           return 1.5;  // per zone (heavy)
                 case TaskType.MowFairways:      return 0.8;  // per fairway
                 case TaskType.RakeBunkers:      return 4.0;  // all bunkers
@@ -37,6 +38,19 @@ namespace Greenkeeper.Sim.Crew
         public static TaskOrder Spray(string zoneId) => new TaskOrder(TaskType.Spray, zoneId, BaseHours(TaskType.Spray));
         public static TaskOrder Water(string zoneId, double mm = DefaultWaterMm) => new TaskOrder(TaskType.Water, zoneId, BaseHours(TaskType.Water), mm);
         public static TaskOrder Fertilize(string zoneId, double n = DefaultFertilizerN) => new TaskOrder(TaskType.Fertilize, zoneId, BaseHours(TaskType.Fertilize), n);
+
+        // ---- Fertility PROGRAM products (source/method/N:K/Fe). The payload rides on TaskOrder.Program. ----
+        public const double SpoonN = 5.0, SpoonK = 5.0, GranularN = 14.0, GranularK = 8.0, IronFe = 18.0;
+        public static TaskOrder Program(string zoneId, FertApplication app, double hours)
+            => new TaskOrder(TaskType.FertilizeProgram, zoneId, hours) { Program = app };
+        /// <summary>Spoon-fed foliar N+K — even growth, low burn/leach, fast (light spray).</summary>
+        public static TaskOrder FeedFoliar(string zoneId) => Program(zoneId, FertApplication.FoliarSpoon(SpoonN, SpoonK), 0.3);
+        /// <summary>Slow-release granular N+K — steady, gentle; soil uptake gated by temp/moisture/roots.</summary>
+        public static TaskOrder FeedGranularSlow(string zoneId) => Program(zoneId, FertApplication.GranularSlow(GranularN, GranularK), 0.4);
+        /// <summary>Quick-release soluble granular — fast green-up, big spike/crash, high burn risk.</summary>
+        public static TaskOrder FeedGranularQuick(string zoneId) => Program(zoneId, FertApplication.GranularQuick(GranularN), 0.4);
+        /// <summary>Iron — colour WITHOUT a growth surge. Cheap, safe; the "make it greener" out.</summary>
+        public static TaskOrder Iron(string zoneId) => Program(zoneId, FertApplication.IronOnly(IronFe), 0.3);
         public static TaskOrder Aerate(string zoneId) => new TaskOrder(TaskType.Aerate, zoneId, BaseHours(TaskType.Aerate));
         public static TaskOrder MowFairway(string fairwayId) => new TaskOrder(TaskType.MowFairways, fairwayId, BaseHours(TaskType.MowFairways));
         public static TaskOrder RakeBunkers() => new TaskOrder(TaskType.RakeBunkers, null, BaseHours(TaskType.RakeBunkers));
@@ -60,6 +74,11 @@ namespace Greenkeeper.Sim.Crew
                     a.IrrigationMm += task.Amount > 0 ? task.Amount : DefaultWaterMm; break;
                 case TaskType.Fertilize:
                     a.FertilizerN += task.Amount > 0 ? task.Amount : DefaultFertilizerN; break;
+                case TaskType.FertilizeProgram:
+                    if (!a.Fert.Active) a.Fert = task.Program;       // first program app on this zone today
+                    else { a.Fert.N += task.Program.N; a.Fert.K += task.Program.K; a.Fert.Fe += task.Program.Fe;
+                           a.Fert.Method = task.Program.Method; a.Fert.Release = task.Program.Release; }
+                    break;
                 case TaskType.Aerate:
                     a.Aerate = true; break;
                 case TaskType.MowFairways:

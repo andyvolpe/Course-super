@@ -187,6 +187,37 @@ namespace Greenkeeper.Tests
             Assert.Greater(foliarGain, 5.0, "foliar still feeds the leaf regardless of the soil");
         }
 
+        // ============================================================================
+        // The Crew/HUD path: a FertilizeProgram task must fold into ZoneAction.Fert so the
+        // program the player picks in the morning window actually reaches the sim.
+        // ============================================================================
+        [Test]
+        public void FertilityProgramTask_FoldsIntoZoneActionFert()
+        {
+            var foliar = Greenkeeper.Sim.Crew.TaskCatalog.FeedFoliar("green-01");
+            var a = Greenkeeper.Sim.Crew.TaskCatalog.Fold(foliar, ZoneAction.None, 1.0);
+            Assert.IsTrue(a.Fert.Active, "a fertility-program task must activate ZoneAction.Fert");
+            Assert.AreEqual(FertMethod.Foliar, a.Fert.Method);
+            Assert.Greater(a.Fert.N, 0.0);
+            Assert.Greater(a.Fert.K, 0.0);
+
+            // Iron product carries Fe only, no N — colour without feeding.
+            var iron = Greenkeeper.Sim.Crew.TaskCatalog.Iron("green-01");
+            var ai = Greenkeeper.Sim.Crew.TaskCatalog.Fold(iron, ZoneAction.None, 1.0);
+            Assert.Greater(ai.Fert.Fe, 0.0);
+            Assert.AreEqual(0.0, ai.Fert.N, 1e-9);
+
+            // And it flows end-to-end through a resolved day: a quick granular dump on a healthy green
+            // raises available N via the gated uptake path.
+            var dir = SummerDir(7, out var course);
+            var plan = new DayPlan();
+            double n0 = course.Get("green-01").NitrogenPct;
+            plan.Set("green-01", Greenkeeper.Sim.Crew.TaskCatalog.Fold(
+                Greenkeeper.Sim.Crew.TaskCatalog.FeedGranularQuick("green-01"), ZoneAction.None, 1.0));
+            dir.ResolveDay(plan);
+            Assert.Greater(course.Get("green-01").NitrogenPct, n0, "the program feed must raise N through the pipeline");
+        }
+
         // ---- season harness ----
 
         private sealed class SeasonResult
