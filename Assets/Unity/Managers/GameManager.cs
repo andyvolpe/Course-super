@@ -135,9 +135,12 @@ namespace Greenkeeper.Unity.Managers
         private DayPlan AutoRoutinePlan()
         {
             var w = new MaintenanceWindow(Crew);
+            // A competent crew won't mow/roll frozen turf — skip mowing on actual-frost days.
+            bool frost = new WeatherSystem(weatherSeed).Generate(Director.Clock.DayIndex).TminF
+                         < AgronomyTuning.Default.FrostThresholdF;
             foreach (var z in Course.Greens)
             {
-                var mow = TaskCatalog.WalkMow(z.Id); mow.Delegated = true; mow.AssignedCrewId = Crew[0].Id; w.TryAssign(mow);
+                if (!frost) { var mow = TaskCatalog.WalkMow(z.Id); mow.Delegated = true; mow.AssignedCrewId = Crew[0].Id; w.TryAssign(mow); }
                 var water = TaskCatalog.Water(z.Id); water.Delegated = true; water.AssignedCrewId = Crew[0].Id; w.TryAssign(water);
             }
             // A scheduled (calendar) spray — the delegated routine, blind to the live tell by design.

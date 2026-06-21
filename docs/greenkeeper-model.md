@@ -95,7 +95,7 @@ via the EditMode Test Runner.
 | A+.1 ball physics | faster green rolls farther; firmer green releases more; slope breaks | ✅ |
 | 5.1 weather | weather is seed-deterministic; different seeds differ | ✅ |
 | 5.2 forecast | near-term forecast tighter than far-term; misses happen; today == actual | ✅ |
-| 5.3 events | storm washes out bunkers (rake restores); frost blocks mowing | ✅ |
+| 5.3 events | storm washes out bunkers (rake restores); mowing on frost damages turf | ✅ |
 | 6 condition | healthy course scores high, sick course low | ✅ |
 | 6 economy | good management profits; neglect bleeds it back; reputation lags condition | ✅ |
 | 7 tournament | on-spec course grades well, off-spec fails; consistency matters; payout + ladder | ✅ |
@@ -149,8 +149,9 @@ plan against a fallible forecast.
   as the day approaches (`band = perDayBand · daysOut`) and can still miss. Deterministic from the
   seed. The gap between forecast and reality is the gameplay.
 - **5.3** Extreme events fire pipeline interrupts (heat spike / storm / frost / flash drought) that
-  stop the skip; storms wash out bunkers (a `RakeBunkers` task restores them) and frost blocks mowing
-  until it lifts. `GameDirector.WeatherInterruptsEnabled` gates them (off to isolate clock tests).
+  stop the skip; storms wash out bunkers (a `RakeBunkers` task restores them); **mowing/rolling frozen
+  turf on a frost day damages it** (density loss + turf debt) — a competent crew/auto-routine waits
+  for the frost to lift. `GameDirector.WeatherInterruptsEnabled` gates these (off to isolate clock tests).
 - **5.4** `ForecastHud` (Unity): the forecast strip with visibly widening bands to plan against.
 
 **Forecast-gamble tuning** (headless `Greenkeeper.FeelTest`): heat-spike threshold 91°F gives ~12

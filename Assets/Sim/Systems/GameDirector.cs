@@ -97,14 +97,17 @@ namespace Greenkeeper.Sim.Systems
             // Per-day RNG stream, forked deterministically per zone.
             var dayRng = new Rng((ulong)unchecked((long)_seed * 2654435761L + Clock.DayIndex + 1));
 
-            // Frost blocks mowing/rolling (and play) for the day until it lifts.
+            // Frost: mowing or rolling frozen turf doesn't take cleanly AND damages it (bruised crowns,
+            // shattered blades, tracking). A competent op waits for the frost to lift.
             bool frost = WeatherInterruptsEnabled && result.Weather.TminF < _tuning.FrostThresholdF;
+            int frostDamaged = 0;
 
             for (int i = 0; i < Course.Zones.Count; i++)
             {
                 var z = Course.Zones[i];
                 var action = plan.For(z.Id);
-                if (frost) { action.Mow = false; action.Roll = false; } // can't mow frozen turf
+                bool frostMow = frost && z.Type != ZoneType.Bunker && (action.Mow || action.Roll);
+                if (frost) { action.Mow = false; action.Roll = false; } // the cut/roll doesn't take on frozen turf
                 ctx.Rng = dayRng;
                 var zoneRng = dayRng.Fork((ulong)(i + 1));
 
@@ -116,8 +119,22 @@ namespace Greenkeeper.Sim.Systems
                 DiseaseSystem.Apply(z, action, ctx, zoneRng);                        // 7 disease
                 MaintenanceSystem.ApplyMechanical(z, action, _tuning);              // 8 maintenance
                 TurfDebtSystem.Apply(z, action, ctx);                               // 9 turf debt
+
+                // Frost-mowing damage (applied before derived surfaces so speed/firmness reflect it).
+                if (frostMow)
+                {
+                    z.DensityPct = Mathx.Clamp(z.DensityPct - _tuning.FrostMowDensityLoss, 0.0, 100.0);
+                    z.TurfDebtPct = Mathx.Clamp(z.TurfDebtPct + _tuning.FrostMowDebt, 0.0, 100.0);
+                    frostDamaged++;
+                }
+
                 DerivedSurfaces.Recompute(z, _tuning);                              // 10 derived surfaces
                 MaintenanceSystem.TickCounters(z, action);                         // 11 counters
+            }
+            if (frostDamaged > 0)
+            {
+                result.Interrupts.Add($"Frost damage — mowed/rolled {frostDamaged} frozen zone(s); turf bruised");
+                RaiseInterrupt();
             }
 
             result.Step($"resolved {Course.Zones.Count} zones; expressions={result.Expressions.Count}");
@@ -169,9 +186,9 @@ namespace Greenkeeper.Sim.Systems
                     result.Interrupts.Add($"Storm: {w.RainMm:F0}mm — {washed} bunkers washed out");
                 }
 
-                // Frost — mowing and play were blocked this day.
+                // Frost — don't mow/roll frozen turf (it bruises), and play is sparse.
                 if (WeatherEvents.IsFrost(w, _tuning))
-                    result.Interrupts.Add($"Frost: {w.TminF:F0}F — mowing/play held");
+                    result.Interrupts.Add($"Frost: {w.TminF:F0}F — hold off mowing the frozen turf");
 
                 // Flash drought — a run of hot, rainless days.
                 if (WeatherEvents.IsHotDry(w, _tuning)) _hotDryRun++; else _hotDryRun = 0;

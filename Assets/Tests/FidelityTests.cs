@@ -65,6 +65,39 @@ namespace Greenkeeper.Tests
         }
 
         [Test]
+        public void MowingOnFrost_DamagesTheTurf()
+        {
+            for (int seed = 0; seed < 80; seed++)
+            {
+                var weather = new WeatherSystem(seed);
+                for (int d = 0; d < GameClock.DaysPerYear; d++)
+                {
+                    if (!WeatherEvents.IsFrost(weather.Generate(d), AgronomyTuning.Default)) continue;
+
+                    // Two identical greens; on the same frost day, one is mown and one is left alone.
+                    var cfg = CourseConfig.GreensOnly(1);
+                    var courseM = CourseFactory.Build(cfg, 1);
+                    var courseL = CourseFactory.Build(cfg, 1);
+                    var dirM = new GameDirector(courseM, seed, cfg.Tuning, cfg.Grass);
+                    var dirL = new GameDirector(courseL, seed, cfg.Tuning, cfg.Grass);
+                    dirM.Clock.JumpTo(d); dirL.Clock.JumpTo(d);
+
+                    var mowPlan = new DayPlan();
+                    mowPlan.Set("green-01", new ZoneAction { Mow = true, MowHeightIn = 0.125, Quality = 1.0 });
+                    var res = dirM.ResolveDay(mowPlan);
+                    dirL.ResolveDay(new DayPlan()); // left alone
+
+                    var gM = courseM.Get("green-01"); var gL = courseL.Get("green-01");
+                    StringAssert.Contains("Frost", string.Join(";", res.Interrupts));
+                    Assert.Less(gM.DensityPct, gL.DensityPct - 3.0, "mowing frozen turf must cost density vs leaving it");
+                    Assert.Greater(gM.TurfDebtPct, gL.TurfDebtPct + 3.0, "and it must register as turf debt");
+                    return;
+                }
+            }
+            Assert.Fail("no frost day found to test");
+        }
+
+        [Test]
         public void HeatSpike_RaisesInterrupt_OverASummer()
         {
             // Heat spikes are weather-driven; over a couple of summers at least one >95F day occurs.

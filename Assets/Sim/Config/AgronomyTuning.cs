@@ -176,7 +176,9 @@ namespace Greenkeeper.Sim.Config
 
         // ---- Extreme weather events (Phase 5.3) ----
         public double StormRainThresholdMm = 18.0;    // a downpour: washes out bunkers, cleanup pressure
-        public double FrostThresholdF = 32.0;         // a frost: blocks mowing/play until it lifts
+        public double FrostThresholdF = 32.0;         // a frost: mowing/rolling frozen turf damages it
+        public double FrostMowDensityLoss = 6.0;      // bruised crowns / shattered blades from mowing on frost
+        public double FrostMowDebt = 8.0;             // and it's a real offence against the turf
         public int FlashDroughtDays = 6;              // consecutive hot, rainless days = a flash drought
         public double FlashDroughtMaxRainMm = 1.0;
         public double FlashDroughtMinTmaxF = 88.0;

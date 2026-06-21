@@ -36,7 +36,7 @@ namespace Greenkeeper.Tests
         {
             double start = EconomyConfig.Default.StartingCash;
             var good = RunYear(PlanGood);   // (endCash, minCash) over a full year from a SPRING start
-            var bad = RunYear(_ => new DayPlan());
+            var bad = RunYear((c, frost) => new DayPlan());
 
             TestContext.WriteLine($"start ${start:N0} | GOOD end ${good.end:N0} (min ${good.min:N0}) | NEGLECT end ${bad.end:N0}");
             Assert.Greater(good.end, start, "a well-run year must end in net PROFIT");
@@ -76,32 +76,37 @@ namespace Greenkeeper.Tests
 
         // ---- helpers ----
 
-        private static (double end, double min) RunYear(System.Func<CourseState, DayPlan> planFn)
+        private static (double end, double min) RunYear(System.Func<CourseState, bool, DayPlan> planFn)
         {
+            const int seed = 7;
             var cfg = CourseConfig.GreensOnly();
-            var course = CourseFactory.Build(cfg, 7);
-            var dir = new GameDirector(course, 7, cfg.Tuning, cfg.Grass)
+            var course = CourseFactory.Build(cfg, seed);
+            var dir = new GameDirector(course, seed, cfg.Tuning, cfg.Grass)
             {
                 Economy = new EconomyState(E),
                 EconomyConfig = E,
             };
+            var weather = new WeatherSystem(seed);
             // Spring start (day 0) — the real player path, not a summer cherry-pick.
             double min = dir.Economy.Cash;
             for (int d = 0; d < 360; d++)
             {
-                dir.ResolveDay(planFn(course));
+                bool frost = weather.Generate(dir.Clock.DayIndex).TminF < AgronomyTuning.Default.FrostThresholdF;
+                dir.ResolveDay(planFn(course, frost));
                 if (dir.Economy.Cash < min) min = dir.Economy.Cash;
             }
             return (dir.Economy.Cash, min);
         }
 
-        private static DayPlan PlanGood(CourseState course)
+        private static DayPlan PlanGood(CourseState course) => PlanGood(course, false);
+
+        private static DayPlan PlanGood(CourseState course, bool frost)
         {
             var plan = new DayPlan();
             foreach (var z in course.Greens)
             {
                 var a = ZoneAction.None;
-                a.Mow = true; a.MowHeightIn = 0.125;
+                if (!frost) { a.Mow = true; a.MowHeightIn = 0.125; } // a good super never mows frozen turf
                 a.IrrigationMm = System.Math.Max(0, (16.0 - z.SoilMoisturePct) / 0.9);
                 a.FertilizerN = z.NitrogenPct < 35 ? 12 : 0;
                 a.Spray = (z.MaxInfection > 0 || z.MeanPressure > AgronomyTuning.Default.TellPressureThreshold);
@@ -110,10 +115,5 @@ namespace Greenkeeper.Tests
             return plan;
         }
 
-        private static DayPlan PlanNeglect(CourseState course)
-        {
-            // Do nothing but keep the lights on (overhead still accrues). Course slides; rounds dry up.
-            return new DayPlan();
-        }
     }
 }
